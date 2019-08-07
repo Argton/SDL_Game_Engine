@@ -7,6 +7,45 @@
 #include <stdbool.h>
 #include <string.h>
 
+/* Some reference for myself about coding practices
+
+int * pt; // an uninitialized pointer
+*pt = 5; // a terrible error
+
+Always make the pointer point to an adress first before assigning a value
+
+This is OK:
+const char * pc = "Behold a string literal!"
+
+
+If a function’s intent is that it not change the contents of the array, use the
+keyword const when declaring the formal parameter in the prototype and in the function defi-
+nition. For example, the prototype and definition for sum() should look like this:
+
+int sum(const int ar[], int n); // prototype
+
+Here is what you can
+do:
+int (* pz)[2]; // pz points to an array of 2 ints
+This statement says that pz is a pointer to an array of two int s. Why the parentheses? Well, []
+has a higher precedence than * . Therefore, with a declaration such as
+int * pax[2]; // pax is an array of two pointers-to-int
+you apply the brackets first, making pax an array of two somethings. Next, you apply the * ,
+making pax an array of two pointers. Finally, use the int , making pax an array of two pointers
+to int .
+
+Malloc:
+double * ptd;
+ptd = (double *) malloc(30 * sizeof(double));
+
+const float * pf; // pf points to a constant float value
+float * const pt; // pt is a const pointer
+const float * const ptr; // means both that ptr must always point to the same location and that the value stored at the location must not change.
+float const * pfc; // same as const float * pfc; // As the comment indicates, placing const after the type name and before the * means that the
+pointer can’t be used to change the pointed-to value
+
+*/
+
 /************************************
 *
 *
