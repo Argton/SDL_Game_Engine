@@ -100,6 +100,8 @@ SDL_Color textColor = { 0, 0, 0, 0xFF };
 SDL_Texture *loadedTextures[1];
 
 int textureCounter = 0;
+
+bool showFps = false;
 /************************************
 *
 *
@@ -696,6 +698,31 @@ void closeTexture(SDL_Texture* texture)
     printf("Killing texture. Number of loaded textures: %d\n", textureCounter);
 }
 
+
+void handleEvent( SDL_Event *e)
+{
+//If a key was pressed
+    if( e->type == SDL_KEYDOWN && e->key.repeat == 0 )
+    {
+
+        switch( e->key.keysym.sym )
+        {
+            case SDLK_F1:
+            if(showFps == true)
+            {
+                showFps = false;
+            }
+            else
+            {
+                showFps = true;
+            }
+            break;
+            case SDLK_UP:
+            break;
+        }
+    }
+}
+
 int main(int argc, char* args[])
 {
     SDL_Color highlightColor = { 0xFF, 0, 0, 0xFF };
@@ -704,6 +731,7 @@ int main(int argc, char* args[])
     double degrees = 0;
     SDL_RendererFlip flipType = SDL_FLIP_NONE;
     SDL_Rect* gDisplayBounds = NULL;
+
 
     // Used to handle scrolling
     SDL_Rect camera = { 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT };
@@ -754,9 +782,8 @@ int main(int argc, char* args[])
             {
                 quit = true;
             }
-
-        //Handle window events
-        //   handleLWindowEvent(&gWindow ,&e);
+        //Handle  events
+        handleEvent(&e);
         }
 
         float avgFPS = countedFrames / ( getTicks(&fpsTimer) / 1000.f );
@@ -774,21 +801,21 @@ int main(int argc, char* args[])
         gfpsTexture.yPos = ( gfpsTexture.mHeight) ;
         gfpsTexture.textureText = timeText;
 
-
         if( !reloadRenderedText(&gfpsTexture, textColor) )
         {
             printf( "Failed to load texture from font! \n" );
         }
-
-
-
 
         //Clear screen
         SDL_SetRenderDrawColor( gRenderer, 0xFF, 0xFF, 0xFF, 0xFF );
         SDL_RenderClear( gRenderer );
 
         textureRender(&gSceneTexture, NULL, degrees, NULL, flipType, 0 , 0);
-        textureRenderttf(&gfpsTexture, NULL, degrees, NULL, flipType, 0 , 0);
+        if(showFps)
+        {
+            textureRenderttf(&gfpsTexture, NULL, degrees, NULL, flipType, 0 , 0);
+        }
+
         SDL_RenderPresent( gRenderer );
         ++countedFrames;
 
