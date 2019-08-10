@@ -97,6 +97,9 @@ SDL_Rect *gDisplayBounds = NULL;
 
 SDL_Color textColor = { 0, 0, 0, 0xFF };
 
+SDL_Texture *loadedTextures[1];
+
+int textureCounter = 0;
 /************************************
 *
 *
@@ -507,6 +510,29 @@ void textureRenderttf(struct ttfStruct *structinput, SDL_Rect* clip, double angl
     SDL_RenderCopyEx( gRenderer, structinput->mTexture, clip, &renderQuad, angle, center, flip );
 }
 
+void loadTextures(SDL_Texture* texture)
+{
+    textureCounter++;
+    SDL_Texture* temp[textureCounter];
+    if(textureCounter > 1)
+    {
+        for(int i = 0; i < textureCounter - 1; i++)
+        {
+            temp[i] = loadedTextures[i];
+        }
+        temp[textureCounter - 1] = texture;
+        SDL_Texture* loadedTextures[textureCounter];
+        for(int i = 0; i < textureCounter; i++)
+        {
+        loadedTextures[i] = temp[i];
+        }
+    }
+    else
+    {
+        loadedTextures[0] = texture;
+    }
+}
+
 void timerInit(struct timerStruct *inputStruct)
 {
     inputStruct->mStarted = false;
@@ -601,10 +627,27 @@ void close()
 }
 
 // Free textures
-void closeTexture(SDL_Texture* texture )
+void closeTexture(SDL_Texture* texture)
 {
     SDL_DestroyTexture( texture );
     texture = NULL;
+    SDL_Texture* temp[textureCounter - 1];
+    int index = 0;
+    for(int i = 0; i < textureCounter; i++)
+    {
+        if(loadedTextures[i] != NULL)
+        {
+            temp[i] = loadedTextures[i];
+            index++;
+        }
+    }
+    textureCounter--;
+    SDL_Texture* loadedTextures[textureCounter];
+    for(int i = 0; i < textureCounter; i++)
+    {
+        loadedTextures[i] = temp[i];
+    }
+    printf("Killing texture. Texturecounter: %d\n", textureCounter);
 }
 
 int main(int argc, char* args[])
@@ -646,9 +689,16 @@ int main(int argc, char* args[])
     {
         printf( "Failed to load texture from image! \n" );
     }
+    else
+    {
+        loadTextures(gSceneTexture.mTexture);
+    }
     if( !LRenderedText(&gfpsTexture, textColor) )
     {
         printf( "Failed to load texture from font! \n" );
+    }
+    {
+        loadTextures(gfpsTexture.mTexture);
     }
 
     timerInit(&fpsTimer);
@@ -710,8 +760,11 @@ int main(int argc, char* args[])
     }
     //Free resources and close SDL
     closeTexture(gTexture);
-    closeTexture(gSceneTexture.mTexture);
-    closeTexture(gfpsTexture.mTexture);
+    int temp = textureCounter;
+    for(int i = 0; i < temp; i++)
+    {
+        closeTexture(loadedTextures[i]);
+    }
     close();
 
     return 0;
