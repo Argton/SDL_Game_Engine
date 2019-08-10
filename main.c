@@ -49,6 +49,16 @@ pointer can’t be used to change the pointed-to value
 /************************************
 *
 *
+* Defines and macros
+*
+*
+*************************************/
+
+#define VSYNC
+
+/************************************
+*
+*
 * Constants
 *
 *
@@ -166,7 +176,12 @@ bool initRenderer()
         else
         {
             //Create renderer for window
+            #ifdef VSYNC
+            gRenderer = SDL_CreateRenderer( gWindow, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC );
+            #else
             gRenderer = SDL_CreateRenderer( gWindow, -1, SDL_RENDERER_ACCELERATED);
+            #endif
+
             if( gRenderer == NULL )
             {
                 printf( "Renderer could not be created! SDL Error: %s\n", SDL_GetError() );
