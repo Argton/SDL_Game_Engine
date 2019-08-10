@@ -64,6 +64,7 @@ pointer can’t be used to change the pointed-to value
 *
 *************************************/
 
+const int SCREEN_TICKS_PER_FRAME = 1000 / 60;
 const int SCREEN_WIDTH = 640;
 const int SCREEN_HEIGHT = 480;
 
@@ -142,6 +143,14 @@ struct ttfStruct
     SDL_Texture* mTexture;
     char *textureText;
     SDL_Color textColor;
+};
+
+struct timerStruct
+{
+    Uint32 mStartTicks;
+    Uint32 mPausedTicks;
+    bool mPaused;
+    bool mStarted;
 };
 
 /************************************
@@ -498,6 +507,68 @@ void textureRenderttf(struct ttfStruct *structinput, SDL_Rect* clip, double angl
     SDL_RenderCopyEx( gRenderer, structinput->mTexture, clip, &renderQuad, angle, center, flip );
 }
 
+void timerInit(struct timerStruct *inputStruct)
+{
+    inputStruct->mStarted = false;
+    inputStruct->mPaused = false;
+    inputStruct->mStartTicks = 0;
+    inputStruct->mPausedTicks = 0;
+}
+
+void timerStart(struct timerStruct *inputStruct)
+{
+    inputStruct->mStarted = true;
+    inputStruct->mPaused = false;
+    inputStruct->mStartTicks = SDL_GetTicks();
+    inputStruct->mPausedTicks = 0;
+}
+
+void timerStop(struct timerStruct *inputStruct)
+{
+    inputStruct->mStarted = false;
+    inputStruct->mPaused = false;
+    inputStruct->mStartTicks = 0;
+    inputStruct->mPausedTicks = 0;
+}
+
+void timerPause(struct timerStruct *inputStruct)
+{
+    if( inputStruct->mStarted && !inputStruct->mPaused )
+    {
+        inputStruct->mPaused = true;
+        inputStruct->mPausedTicks = SDL_GetTicks() - inputStruct->mStartTicks;
+        inputStruct->mStartTicks = 0;
+    }
+}
+
+void timerUnpause(struct timerStruct *inputStruct)
+{
+    if( inputStruct->mStarted && inputStruct->mPaused )
+    {
+        inputStruct->mPaused = false;
+        inputStruct->mPausedTicks = SDL_GetTicks() - inputStruct->mPausedTicks;
+        inputStruct->mPausedTicks = 0;
+    }
+}
+
+Uint32 getTicks(struct timerStruct *inputStruct)
+{
+    Uint32 time = 0;
+    if( inputStruct->mStarted )
+    {
+        if( inputStruct->mPaused)
+        {
+            time = inputStruct->mPausedTicks;
+        }
+        else
+            {
+                time = SDL_GetTicks() - inputStruct->mStartTicks;
+            }
+    }
+    return time;
+}
+
+// Free all SDL related stuff from memory, except for textures which are freed separately
 void close()
 {
     //Deallocate surface
@@ -529,6 +600,7 @@ void close()
     Mix_Quit();
 }
 
+// Free textures
 void closeTexture(SDL_Texture* texture )
 {
     SDL_DestroyTexture( texture );
@@ -543,15 +615,19 @@ int main(int argc, char* args[])
     double degrees = 0;
     SDL_RendererFlip flipType = SDL_FLIP_NONE;
     SDL_Rect* gDisplayBounds = NULL;
+
+    // Used to handle scrolling
     SDL_Rect camera = { 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT };
 
     //Start up SDL and create window
     if( !initRenderer() )
     {
-        printf( "Failed to initialize!\n" );
+        printf( "Failed to initialize SDL!\n" );
     }
-    struct ttfStruct gTimeTexture;
+
     struct textureStruct gSceneTexture;
+    struct ttfStruct gfpsTexture;
+    struct timerStruct fpsTimer;
 
     SDL_Color textColor = { 0, 0, 0, 0 };
 
@@ -559,19 +635,26 @@ int main(int argc, char* args[])
     gSceneTexture.xPos = ( 0 ) ;
     gSceneTexture.yPos = ( 0 ) ;
 
-    gTimeTexture.fontPath = "lazy.ttf";
-    gTimeTexture.textureText = "LMAO";
-    gTimeTexture.xPos = ( 0 ) ;
-    gTimeTexture.yPos = ( 0 ) ;
+    gfpsTexture.fontPath = "lazy.ttf";
+    gfpsTexture.textureText = "LMAO";
+    gfpsTexture.xPos = 0;
+    gfpsTexture.yPos = 0;
+
+    int countedFrames = 0;
 
     if( !LTexture(&gSceneTexture) )
     {
         printf( "Failed to load texture from image! \n" );
     }
-    if( !LRenderedText(&gTimeTexture, textColor) )
+    if( !LRenderedText(&gfpsTexture, textColor) )
     {
         printf( "Failed to load texture from font! \n" );
     }
+
+    timerInit(&fpsTimer);
+    timerStart(&fpsTimer);
+
+    // Main loop
     while( !quit )
     {
         //Handle events on queue
@@ -587,19 +670,48 @@ int main(int argc, char* args[])
         //   handleLWindowEvent(&gWindow ,&e);
         }
 
+        float avgFPS = countedFrames / ( getTicks(&fpsTimer) / 1000.f );
+        if( avgFPS > 2000000 )
+        {
+            avgFPS = 0;
+        }
+
+        char timeText[100] = "";
+        char timeBuffer[100] = "";
+        strcpy(timeText, "FPS: ");
+        sprintf(timeBuffer, "%.0f", avgFPS  );
+        strcat(timeText, timeBuffer);
+        gfpsTexture.xPos = (SCREEN_WIDTH - 1.5*gfpsTexture.mWidth ) ;
+        gfpsTexture.yPos = ( gfpsTexture.mHeight) ;
+        gfpsTexture.textureText = timeText;
+
+
+        if( !LRenderedText(&gfpsTexture, textColor) )
+        {
+            printf( "Failed to load texture from font! \n" );
+        }
+
 
         //Clear screen
         SDL_SetRenderDrawColor( gRenderer, 0xFF, 0xFF, 0xFF, 0xFF );
         SDL_RenderClear( gRenderer );
 
         textureRender(&gSceneTexture, NULL, degrees, NULL, flipType, 0 , 0);
-        textureRenderttf(&gTimeTexture, NULL, degrees, NULL, flipType, 0 , 0);
+        textureRenderttf(&gfpsTexture, NULL, degrees, NULL, flipType, 0 , 0);
         SDL_RenderPresent( gRenderer );
+        ++countedFrames;
+
+        int frameTicks = getTicks(&fpsTimer);
+        if( frameTicks < SCREEN_TICKS_PER_FRAME )
+        {
+            //Wait remaining time
+            SDL_Delay( SCREEN_TICKS_PER_FRAME - frameTicks );
+        }
     }
     //Free resources and close SDL
     closeTexture(gTexture);
     closeTexture(gSceneTexture.mTexture);
-    closeTexture(gTimeTexture.mTexture);
+    closeTexture(gfpsTexture.mTexture);
     close();
 
     return 0;
