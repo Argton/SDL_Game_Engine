@@ -85,6 +85,10 @@ SDL_Renderer* gRenderer = NULL;
 //The surface contained by the window
 SDL_Surface* gScreenSurface = NULL;
 
+//Globally used font
+TTF_Font *gFont = NULL;
+
+SDL_Surface* gImage = NULL;
 /************************************
 *
 *
@@ -454,9 +458,142 @@ void textureRender(struct textureStruct *structinput, SDL_Rect* clip, double ang
     SDL_RenderCopyEx( gRenderer, structinput->mTexture, clip, &renderQuad, angle, center, flip );
 }
 
+bool loadFromRenderedText(struct ttfStruct *structinput, SDL_Color textColor )
+{
+    //Get rid of preexisting texture
+    //closeTexture();
+    //Render text surface
+    SDL_Surface* textSurface = TTF_RenderText_Solid( gFont, structinput->textureText, textColor );
+    if( textSurface == NULL )
+    {
+        printf( "Unable to render text surface! SDL_ttf Error: %s\n", TTF_GetError() );
+    }
+    else
+    {
+        //Create texture from surface pixels
+        mTexture = SDL_CreateTextureFromSurface( gRenderer, textSurface );
+        if( mTexture == NULL )
+        {
+            printf( "Unable to create texture from rendered text! SDL Error: %s\n", SDL_GetError() );
+        }
+        else
+        {
+            //Get image dimensions
+            structinput->mWidth = textSurface->w;
+            structinput->mHeight = textSurface->h;
+        }
+
+        //Get rid of old surface
+        SDL_FreeSurface( textSurface );
+    }
+
+    //Return success
+    structinput->mTexture = mTexture;
+    return mTexture != NULL;
+}
+
+void close()
+{
+    //Deallocate surface
+    SDL_FreeSurface( gImage );
+    gImage= NULL;
+
+    //Free global font
+    TTF_CloseFont( gFont );
+    gFont = NULL;
+
+    //Destroy window
+    SDL_DestroyRenderer( gRenderer );
+    SDL_DestroyWindow( gWindow );
+    gWindow = NULL;
+    gRenderer = NULL;
+
+    //Free the music
+
+    //Quit SDL subsystems
+    TTF_Quit();
+    IMG_Quit();
+    SDL_Quit();
+    Mix_Quit();
+}
+
+void closeTexture()
+{
+    //Free loaded image
+    SDL_DestroyTexture( gTexture );
+    gTexture = NULL;
+
+    //Destroy window
+    SDL_DestroyRenderer( gRenderer );
+    SDL_DestroyWindow( gWindow );
+    gWindow = NULL;
+    gRenderer = NULL;
+
+    //Quit SDL subsystems
+    IMG_Quit();
+    SDL_Quit();
+}
 
 int main(int argc, char* args[])
 {
-    printf("Hello world!\n");
-    return 0;
+    SDL_Color highlightColor = { 0xFF, 0, 0, 0xFF };
+    bool quit = false;
+    SDL_Event e;
+    double degrees = 0;
+    SDL_RendererFlip flipType = SDL_FLIP_NONE;
+    SDL_Rect* gDisplayBounds = NULL;
+    SDL_Rect camera = { 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT };
+    struct LWindow gWindow;
+
+    //Start up SDL and create window
+    if( !initRenderer() )
+    {
+        printf( "Failed to initialize!\n" );
+    }
+    struct ttfStruct gTimeTexture;
+    struct textureStruct gSceneTexture;
+
+    SDL_Color textColor = { 0, 0, 0, 255 };
+
+    //gBGTexture.imagePath = "31_scrolling_backgrounds/bg.png";
+    char *inputText = "lmao";
+
+    gSceneTexture.imagePath = "texture.png";
+    if( !LTexture(&gSceneTexture) )
+    {
+        printf( "Failed to load media! \n" );
+    }
+    gSceneTexture.xPos = ( 0 ) ;
+    gSceneTexture.yPos = ( 0 ) ;
+    while( !quit )
+    {
+        //Handle events on queue
+        while( SDL_PollEvent( &e ) != 0 )
+        {
+            //User requests quit
+            if( e.type == SDL_QUIT )
+            {
+                quit = true;
+            }
+
+        //Handle window events
+     //   handleLWindowEvent(&gWindow ,&e);
+        }
+
+
+        //Clear screen
+        SDL_SetRenderDrawColor( gRenderer, 0xFF, 0xFF, 0xFF, 0xFF );
+        SDL_RenderClear( gRenderer );
+
+       /* if( !loadMedia(&gfpsTexture, textColor) )
+        {
+            printf( "Failed to load media! \n" );
+        }*/
+
+        textureRender(&gSceneTexture, &camera, degrees, NULL, flipType, 0 , 0);
+}
+        //Free resources and close SDL
+        close();
+
+        return 0;
 }
