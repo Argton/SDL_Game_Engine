@@ -97,11 +97,11 @@ SDL_Rect *gDisplayBounds = NULL;
 
 SDL_Color textColor = { 0, 0, 0, 0xFF };
 
-SDL_Texture *loadedTextures[1];
-
 int textureCounter = 0;
 
 bool showFps = false;
+
+bool kill = false;
 /************************************
 *
 *
@@ -342,7 +342,6 @@ bool initLWindowRenderer(struct LWindow *inputStruct)
 // Optimize a surface
 SDL_Surface* loadSurface( char *path )
 {
-    bool success = false;
     //The final optimized image
 	SDL_Surface* optimizedSurface = NULL;
 
@@ -351,7 +350,6 @@ SDL_Surface* loadSurface( char *path )
     if( loadedSurface == NULL )
     {
         printf( "Unable to load image %s! SDL Error: %s\n", path, IMG_GetError() );
-        success = false;
     }
     else
     {
@@ -360,7 +358,6 @@ SDL_Surface* loadSurface( char *path )
 		if( optimizedSurface == NULL )
 		{
 			printf( "Unable to optimize image %s! SDL Error: %s\n", path, SDL_GetError() );
-			success = false;
 		}
 
 		//Get rid of old loaded surface
@@ -535,7 +532,7 @@ bool LRenderedText(struct ttfStruct *structinput, SDL_Color textColor )
     return structinput->mTexture != NULL && success;
 }
 
-bool reloadRenderedText(struct ttfStruct *structinput, SDL_Color textColor )
+bool reloadRenderedText(struct ttfStruct *structinput, SDL_Color textColor)
 {
     //Loading success flag
     bool success = true;
@@ -568,10 +565,10 @@ bool reloadRenderedText(struct ttfStruct *structinput, SDL_Color textColor )
 }
 
 // Render texture for a struct containing an image path to render
-void textureRender(struct textureStruct *structinput, SDL_Rect* clip, double angle, SDL_Point* center, SDL_RendererFlip flip, int offsetX, int offsetY)
+void textureRender(struct textureStruct *structinput, SDL_Rect* clip, double angle, SDL_Point* center, SDL_RendererFlip flip, int offsetX, int offsetY, double scaleX, double scaleY)
 {
     //Set rendering space and render to screen
-    SDL_Rect renderQuad = { structinput->xPos + offsetX, structinput->yPos + offsetY, structinput->mWidth, structinput->mHeight };
+    SDL_Rect renderQuad = { structinput->xPos + offsetX, structinput->yPos + offsetY, structinput->mWidth * scaleX, structinput->mHeight * scaleY };
 
     //Set clip rendering dimensions
     if( clip != NULL )
@@ -718,6 +715,14 @@ void handleEvent( SDL_Event *e)
             }
             break;
             case SDLK_UP:
+            if(kill == true)
+            {
+                kill = false;
+            }
+            else
+            {
+                kill = true;
+            }
             break;
         }
     }
@@ -810,7 +815,21 @@ int main(int argc, char* args[])
         SDL_SetRenderDrawColor( gRenderer, 0xFF, 0xFF, 0xFF, 0xFF );
         SDL_RenderClear( gRenderer );
 
-        textureRender(&gSceneTexture, NULL, degrees, NULL, flipType, 0 , 0);
+        SDL_Rect bottomViewport;
+        bottomViewport.x = 0;
+        bottomViewport.y = 0;
+        bottomViewport.w = SCREEN_WIDTH + 500;
+        bottomViewport.h = SCREEN_HEIGHT;
+        SDL_RenderSetViewport( gRenderer, &bottomViewport );
+
+
+
+
+        if(!kill)
+        {
+            textureRender(&gSceneTexture, NULL, degrees, NULL, flipType, 0 , 0, (double) SCREEN_WIDTH / gSceneTexture.mWidth, (double) SCREEN_HEIGHT / gSceneTexture.mHeight);
+        }
+
         if(showFps)
         {
             textureRenderttf(&gfpsTexture, NULL, degrees, NULL, flipType, 0 , 0);
