@@ -134,7 +134,7 @@ struct LWindow
 // Used for rendering a texture from a text string
 struct ttfStruct
 {
-    char *imagePath;
+    char *fontPath;
     int mWidth;
     int mHeight;
     int xPos;
@@ -381,7 +381,7 @@ SDL_Texture* loadTexture( char *path )
     return gTexture;
 }
 
-// Create texture from surface for a struct
+// Create texture from image for a struct
 bool LTexture(struct textureStruct *structinput)
 {
     structinput->mTexture = NULL;
@@ -418,11 +418,58 @@ bool LTexture(struct textureStruct *structinput)
     return structinput->mTexture != NULL;
 }
 
-// Render texture for a struct
-void textureRender(struct textureStruct *structinput, SDL_Rect* clip, double angle, SDL_Point* center, SDL_RendererFlip flip, int posX, int posY)
+// Create texture from a text string for a struct
+bool LRenderedText(struct ttfStruct *structinput, SDL_Color textColor )
+{
+    //Loading success flag
+    bool success = true;
+
+    //Open the font
+    gFont = TTF_OpenFont( structinput->fontPath, 28 );
+    if( gFont == NULL )
+    {
+        printf( "Failed to load font! SDL_ttf Error: %s\n", TTF_GetError() );
+        success = false;
+    }
+    else
+    {
+        //Render text surface
+        SDL_Surface* textSurface = TTF_RenderText_Solid( gFont, structinput->textureText, textColor );
+        if( textSurface == NULL )
+        {
+            printf( "Unable to render text surface! SDL_ttf Error: %s\n", TTF_GetError() );
+            success = false;
+        }
+        else
+        {
+            //Create texture from surface pixels
+            structinput->mTexture = SDL_CreateTextureFromSurface( gRenderer, textSurface );
+            if( structinput->mTexture == NULL )
+            {
+                printf( "Unable to create texture from rendered text! SDL Error: %s\n", SDL_GetError() );
+                success = false;
+            }
+            else
+            {
+                //Get image dimensions
+                structinput->mWidth = textSurface->w;
+                structinput->mHeight = textSurface->h;
+            }
+        }
+        //Get rid of old surface
+        SDL_FreeSurface( textSurface );
+        textSurface = NULL;
+    }
+
+    //Return success
+    return structinput->mTexture != NULL && success;
+}
+
+// Render texture for a struct containing an image path to render
+void textureRender(struct textureStruct *structinput, SDL_Rect* clip, double angle, SDL_Point* center, SDL_RendererFlip flip, int offsetX, int offsetY)
 {
     //Set rendering space and render to screen
-    SDL_Rect renderQuad = { structinput->xPos+ posX, structinput->yPos+ posY, structinput->mWidth, structinput->mHeight };
+    SDL_Rect renderQuad = { structinput->xPos + offsetX, structinput->yPos + offsetY, structinput->mWidth, structinput->mHeight };
 
     //Set clip rendering dimensions
     if( clip != NULL )
@@ -434,37 +481,21 @@ void textureRender(struct textureStruct *structinput, SDL_Rect* clip, double ang
     SDL_RenderCopyEx( gRenderer, structinput->mTexture, clip, &renderQuad, angle, center, flip );
 }
 
-// Create texture from a text string
-bool loadFromRenderedText(struct ttfStruct *structinput, SDL_Color textColor )
+// Render texture for a struct containing a text string to render
+void textureRenderttf(struct ttfStruct *structinput, SDL_Rect* clip, double angle, SDL_Point* center, SDL_RendererFlip flip, int offsetX, int offsetY)
 {
-    //Render text surface
-    SDL_Surface* textSurface = TTF_RenderText_Solid( gFont, structinput->textureText, textColor );
-    if( textSurface == NULL )
-    {
-        printf( "Unable to render text surface! SDL_ttf Error: %s\n", TTF_GetError() );
-    }
-    else
-    {
-        //Create texture from surface pixels
-        structinput->mTexture = SDL_CreateTextureFromSurface( gRenderer, textSurface );
-        if( structinput->mTexture == NULL )
-        {
-            printf( "Unable to create texture from rendered text! SDL Error: %s\n", SDL_GetError() );
-        }
-        else
-        {
-            //Get image dimensions
-            structinput->mWidth = textSurface->w;
-            structinput->mHeight = textSurface->h;
-        }
+    //Set rendering space and render to screen
+    SDL_Rect renderQuad = { structinput->xPos + offsetX, structinput->yPos + offsetY, structinput->mWidth, structinput->mHeight };
 
-        //Get rid of old surface
-        SDL_FreeSurface( textSurface );
-        textSurface = NULL;
+    //Set clip rendering dimensions
+    if( clip != NULL )
+    {
+        renderQuad.w = clip->w;
+        renderQuad.h = clip->h;
     }
 
-    //Return success
-    return structinput->mTexture != NULL;
+    //Render to screen
+    SDL_RenderCopyEx( gRenderer, structinput->mTexture, clip, &renderQuad, angle, center, flip );
 }
 
 void close()
@@ -498,10 +529,10 @@ void close()
     Mix_Quit();
 }
 
-void closeTexture(struct textureStruct *structinput)
+void closeTexture(SDL_Texture* texture )
 {
-    SDL_DestroyTexture( structinput->mTexture );
-    structinput->mTexture = NULL;
+    SDL_DestroyTexture( texture );
+    texture = NULL;
 }
 
 int main(int argc, char* args[])
@@ -528,11 +559,19 @@ int main(int argc, char* args[])
     gSceneTexture.xPos = ( 0 ) ;
     gSceneTexture.yPos = ( 0 ) ;
 
+    gTimeTexture.fontPath = "lazy.ttf";
+    gTimeTexture.textureText = "LMAO";
+    gTimeTexture.xPos = ( 0 ) ;
+    gTimeTexture.yPos = ( 0 ) ;
+
     if( !LTexture(&gSceneTexture) )
     {
-        printf( "Failed to load media! \n" );
+        printf( "Failed to load texture from image! \n" );
     }
-
+    if( !LRenderedText(&gTimeTexture, textColor) )
+    {
+        printf( "Failed to load texture from font! \n" );
+    }
     while( !quit )
     {
         //Handle events on queue
@@ -550,19 +589,17 @@ int main(int argc, char* args[])
 
 
         //Clear screen
-        SDL_SetRenderDrawColor( gRenderer, 0x00, 0x00, 0x00, 0xFF );
+        SDL_SetRenderDrawColor( gRenderer, 0xFF, 0xFF, 0xFF, 0xFF );
         SDL_RenderClear( gRenderer );
 
-       /* if( !loadMedia(&gfpsTexture, textColor) )
-        {
-            printf( "Failed to load media! \n" );
-        }*/
-
         textureRender(&gSceneTexture, NULL, degrees, NULL, flipType, 0 , 0);
+        textureRenderttf(&gTimeTexture, NULL, degrees, NULL, flipType, 0 , 0);
         SDL_RenderPresent( gRenderer );
     }
     //Free resources and close SDL
-    closeTexture(&gSceneTexture);
+    closeTexture(gTexture);
+    closeTexture(gSceneTexture.mTexture);
+    closeTexture(gTimeTexture.mTexture);
     close();
 
     return 0;
