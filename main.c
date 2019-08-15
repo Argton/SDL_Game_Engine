@@ -53,9 +53,11 @@ pointer can’t be used to change the pointed-to value
 *
 *
 *************************************/
-
+// Whether to use Vsync or not
 #define VSYNC
 
+// Used to create particle effects
+#define TOTAL_PARTICLES 20
 /************************************
 *
 *
@@ -158,13 +160,63 @@ struct timerStruct
     bool mStarted;
 };
 
-/************************************
+struct particleStruct
+{
+    int mPosX;
+    int mPosY;
+    int mFrame;
+    SDL_Texture* mTexture;
+};
+
+struct dotStruct
+{
+    int DOT_WIDTH;
+    int DOT_HEIGHT;
+    int DOT_VEL;
+    int mPosX;
+    int mPosY;
+    int mVelX;
+    int mVelY;
+    char *imagePath;
+    SDL_Texture* mTexture;
+    SDL_Color textColor;
+    SDL_Rect mCollider;
+    struct particleStruct *particle[TOTAL_PARTICLES];
+};/************************************
 *
 *
 * Functions
 *
 *
 *************************************/
+
+// Give the dot struct some init values
+void initDot(struct dotStruct *inputStruct)
+{
+    inputStruct->DOT_WIDTH = 20;
+    inputStruct->DOT_HEIGHT = 20;
+    inputStruct->DOT_VEL = 1;
+    inputStruct->mPosX = 0;
+    inputStruct->mPosY = 0;
+    inputStruct->mVelX = 0;
+    inputStruct->mVelY = 0;
+    inputStruct->mCollider.w = inputStruct->DOT_WIDTH;
+    inputStruct->mCollider.h = inputStruct->DOT_HEIGHT;
+}
+
+// Initialize a random particle effect
+void initParticle(struct particleStruct *inputStruct, int x, int y)
+{
+    inputStruct->mPosX = x - 5 + ( rand() ) % 25;
+    inputStruct->mPosY = y - 5 + ( rand() ) % 25;
+    inputStruct->mFrame = rand() % 5;
+    switch( rand() % 3 )
+    {
+        case 0: inputStruct->mTexture = &gRedTexture; break;
+        case 1: inputStruct->mTexture = &gGreenTexture; break;
+        case 2: inputStruct->mTexture = &gBlueTexture; break;
+    }
+}
 
 // Init all SDL related stuff
 bool initRenderer()
@@ -337,6 +389,43 @@ bool initLWindowRenderer(struct LWindow *inputStruct)
         success = false;
     }
     return inputStruct->mWindow != NULL && inputStruct->mRenderer != NULL && success;
+}
+
+// Create texture for dotStructs
+bool LDotTexture(struct dotStruct *structinput)
+{
+
+    structinput->mTexture = NULL;
+    newTexture = NULL;
+    SDL_Surface* loadedSurface = IMG_Load( structinput->imagePath );
+    if( loadedSurface == NULL )
+    {
+        printf( "Unable to load image %s! SDL_image Error: %s\n", structinput->imagePath, IMG_GetError() );
+    }
+    else
+    {
+        //Color key image
+        SDL_SetColorKey( loadedSurface, SDL_TRUE, SDL_MapRGB( loadedSurface->format, 0, 0xFF, 0xFF ) );
+        //Create texture from surface pixels
+        newTexture = SDL_CreateTextureFromSurface( gRenderer, loadedSurface );
+        if( newTexture == NULL )
+        {
+            printf( "Unable to create texture from %s! SDL Error: %s\n", structinput->imagePath, SDL_GetError() );
+        }
+        else
+        {
+            //Get image dimensions
+            structinput->DOT_WIDTH = loadedSurface->w;
+            structinput->DOT_HEIGHT = loadedSurface->h;
+        }
+
+        //Get rid of old loaded surface
+        SDL_FreeSurface( loadedSurface );
+    }
+    loadedSurface = NULL;
+    //Return success
+    structinput->mTexture = newTexture;
+    return newTexture != NULL;
 }
 
 // Optimize a surface
