@@ -182,7 +182,23 @@ struct dotStruct
     SDL_Color textColor;
     SDL_Rect mCollider;
     struct particleStruct *particle[TOTAL_PARTICLES];
-};/************************************
+};
+
+/************************************
+*
+*
+* Initialize structs
+*
+*
+*************************************/
+
+struct textureStruct gDotTexture;
+struct textureStruct gRedTexture;
+struct textureStruct gGreenTexture;
+struct textureStruct gBlueTexture;
+struct textureStruct gShimmerTexture;
+
+/************************************
 *
 *
 * Functions
@@ -396,7 +412,6 @@ bool LDotTexture(struct dotStruct *structinput)
 {
 
     structinput->mTexture = NULL;
-    newTexture = NULL;
     SDL_Surface* loadedSurface = IMG_Load( structinput->imagePath );
     if( loadedSurface == NULL )
     {
@@ -407,8 +422,8 @@ bool LDotTexture(struct dotStruct *structinput)
         //Color key image
         SDL_SetColorKey( loadedSurface, SDL_TRUE, SDL_MapRGB( loadedSurface->format, 0, 0xFF, 0xFF ) );
         //Create texture from surface pixels
-        newTexture = SDL_CreateTextureFromSurface( gRenderer, loadedSurface );
-        if( newTexture == NULL )
+        structinput->mTexture = SDL_CreateTextureFromSurface( gRenderer, loadedSurface );
+        if( structinput->mTexture == NULL )
         {
             printf( "Unable to create texture from %s! SDL Error: %s\n", structinput->imagePath, SDL_GetError() );
         }
@@ -424,8 +439,7 @@ bool LDotTexture(struct dotStruct *structinput)
     }
     loadedSurface = NULL;
     //Return success
-    structinput->mTexture = newTexture;
-    return newTexture != NULL;
+    return structinput->mTexture != NULL;
 }
 
 // Optimize a surface
