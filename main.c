@@ -511,14 +511,12 @@ SDL_Surface* loadSurface( char *path )
 // Create texture from image for a struct
 bool LTexture(struct textureStruct *structinput)
 {
-    bool success = true;
     structinput->mTexture = NULL;
 
     SDL_Surface* loadedSurface = IMG_Load( structinput->imagePath );
     if( loadedSurface == NULL )
     {
         printf( "Unable to load image %s! SDL_image Error: %s\n", structinput->imagePath, IMG_GetError() );
-        success = false;
     }
     else
     {
@@ -529,7 +527,6 @@ bool LTexture(struct textureStruct *structinput)
         if( structinput->mTexture == NULL )
         {
             printf( "Unable to create texture from %s! SDL Error: %s\n", structinput->imagePath, SDL_GetError() );
-            success = false;
         }
         else
         {
@@ -543,23 +540,21 @@ bool LTexture(struct textureStruct *structinput)
         loadedSurface = NULL;
     }
     textureCounter++;
-    if(structinput->mTexture != NULL && success)
+    if(structinput->mTexture != NULL)
     {
         printf("Texture loaded. Number of loaded textures: %d\n", textureCounter);
     }
-    return structinput->mTexture != NULL && success;
+    return structinput->mTexture != NULL;
 }
 
 bool reloadTexture(struct textureStruct *structinput)
 {
-    bool success = true;
     structinput->mTexture = NULL;
 
     SDL_Surface* loadedSurface = IMG_Load( structinput->imagePath );
     if( loadedSurface == NULL )
     {
         printf( "Unable to load image %s! SDL_image Error: %s\n", structinput->imagePath, IMG_GetError() );
-        success = false;
     }
     else
     {
@@ -570,7 +565,6 @@ bool reloadTexture(struct textureStruct *structinput)
         if( structinput->mTexture == NULL )
         {
             printf( "Unable to create texture from %s! SDL Error: %s\n", structinput->imagePath, SDL_GetError() );
-            success = false;
         }
         else
         {
@@ -583,20 +577,17 @@ bool reloadTexture(struct textureStruct *structinput)
         SDL_FreeSurface( loadedSurface );
         loadedSurface = NULL;
     }
-    return structinput->mTexture != NULL && success;
+    return structinput->mTexture != NULL;
 }
 
 // Create texture from a text string for a struct
 bool LRenderedText(struct ttfStruct *structinput, SDL_Color textColor )
 {
-    bool success = true;
-
     //Open the font
     gFont = TTF_OpenFont( structinput->fontPath, 28 );
     if( gFont == NULL )
     {
         printf( "Failed to load font! SDL_ttf Error: %s\n", TTF_GetError() );
-        success = false;
     }
     else
     {
@@ -605,7 +596,6 @@ bool LRenderedText(struct ttfStruct *structinput, SDL_Color textColor )
         if( textSurface == NULL )
         {
             printf( "Unable to render text surface! SDL_ttf Error: %s\n", TTF_GetError() );
-            success = false;
         }
         else
         {
@@ -614,7 +604,6 @@ bool LRenderedText(struct ttfStruct *structinput, SDL_Color textColor )
             if( structinput->mTexture == NULL )
             {
                 printf( "Unable to create texture from rendered text! SDL Error: %s\n", SDL_GetError() );
-                success = false;
             }
             else
             {
@@ -627,13 +616,14 @@ bool LRenderedText(struct ttfStruct *structinput, SDL_Color textColor )
         SDL_FreeSurface( textSurface );
         textSurface = NULL;
     }
-    textureCounter++;
+
     //Return success
-    if(structinput->mTexture != NULL && success)
+    if(structinput->mTexture != NULL)
     {
+        textureCounter++;
         printf("Texture loaded. Number of loaded textures: %d\n", textureCounter);
     }
-    return structinput->mTexture != NULL && success;
+    return structinput->mTexture != NULL;
 }
 
 bool reloadRenderedText(struct ttfStruct *structinput, SDL_Color textColor)
