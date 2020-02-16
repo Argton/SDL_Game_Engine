@@ -410,7 +410,6 @@ bool initLWindowRenderer(struct LWindow *inputStruct)
 // Create texture for dotStructs
 bool LDotTexture(struct dotStruct *structinput)
 {
-
     structinput->mTexture = NULL;
     SDL_Surface* loadedSurface = IMG_Load( structinput->imagePath );
     if( loadedSurface == NULL )
@@ -432,8 +431,9 @@ bool LDotTexture(struct dotStruct *structinput)
             //Get image dimensions
             structinput->DOT_WIDTH = loadedSurface->w;
             structinput->DOT_HEIGHT = loadedSurface->h;
+            textureCounter++;
+            printf("Texture loaded. Number of loaded textures: %d\n", textureCounter);
         }
-
         //Get rid of old loaded surface
         SDL_FreeSurface( loadedSurface );
     }
@@ -443,6 +443,7 @@ bool LDotTexture(struct dotStruct *structinput)
 }
 
 // Optimize a surface
+/*
 SDL_Surface* loadSurface( char *path )
 {
     //The final optimized image
@@ -469,10 +470,10 @@ SDL_Surface* loadSurface( char *path )
 	}
 
 	return optimizedSurface;
-}
+}*/
 
 // Create texture from surface
-SDL_Texture* loadTexture( char *path )
+/*SDL_Texture* loadTexture( char *path )
 {
     bool success;
 
@@ -506,7 +507,7 @@ SDL_Texture* loadTexture( char *path )
     }
     return gTexture;
 }
-
+*/
 // Create texture from image for a struct
 bool LTexture(struct textureStruct *structinput)
 {
@@ -700,6 +701,22 @@ void textureRenderttf(struct ttfStruct *structinput, SDL_Rect* clip, double angl
     SDL_RenderCopyEx( gRenderer, structinput->mTexture, clip, &renderQuad, angle, center, flip );
 }
 
+// Render texture for a dotstruct
+void textureDotRender(struct dotStruct *structinput, SDL_Rect* clip, double angle, SDL_Point* center, SDL_RendererFlip flip)
+{
+    //Set rendering space and render to screen
+    SDL_Rect renderQuad = { structinput->mPosX, structinput->mPosY, structinput->DOT_WIDTH, structinput->DOT_HEIGHT };
+
+    //Set clip rendering dimensions
+    if( clip != NULL )
+    {
+        renderQuad.w = clip->w;
+        renderQuad.h = clip->h;
+    }
+    //Render to screen
+    SDL_RenderCopyEx( gRenderer, structinput->mTexture, clip, &renderQuad, angle, center, flip );
+}
+
 void timerInit(struct timerStruct *inputStruct)
 {
     inputStruct->mStarted = false;
@@ -831,6 +848,8 @@ void handleEvent( SDL_Event *e)
     }
 }
 
+
+
 int main(int argc, char* args[])
 {
     SDL_Color highlightColor = { 0xFF, 0, 0, 0xFF };
@@ -853,6 +872,7 @@ int main(int argc, char* args[])
     struct textureStruct gSceneTexture;
     struct ttfStruct gfpsTexture;
     struct timerStruct fpsTimer;
+    struct dotStruct dot;
 
     SDL_Color textColor = { 0, 0, 0, 0 };
 
@@ -865,6 +885,8 @@ int main(int argc, char* args[])
     gfpsTexture.xPos = 0;
     gfpsTexture.yPos = 0;
 
+    dot.imagePath = "dot.bmp";
+
     int countedFrames = 0;
 
     if( !LTexture(&gSceneTexture) )
@@ -875,9 +897,14 @@ int main(int argc, char* args[])
     {
         printf( "Failed to load texture from font! \n" );
     }
+    if(!LDotTexture(&dot) )
+    {
+        printf( "Failed to load gDot texture! \n" );
+    }
 
     timerInit(&fpsTimer);
     timerStart(&fpsTimer);
+    initDot(&dot);
 
     // Main loop
     while( !quit )
@@ -918,12 +945,13 @@ int main(int argc, char* args[])
         SDL_SetRenderDrawColor( gRenderer, 0xFF, 0xFF, 0xFF, 0xFF );
         SDL_RenderClear( gRenderer );
 
-        SDL_Rect bottomViewport;
+      /*  SDL_Rect bottomViewport;
         bottomViewport.x = 0;
         bottomViewport.y = 0;
         bottomViewport.w = SCREEN_WIDTH + 500;
         bottomViewport.h = SCREEN_HEIGHT;
         SDL_RenderSetViewport( gRenderer, &bottomViewport );
+        */
 
 
 
@@ -931,6 +959,7 @@ int main(int argc, char* args[])
         if(!kill)
         {
             textureRender(&gSceneTexture, NULL, degrees, NULL, flipType, 0 , 0, (double) SCREEN_WIDTH / gSceneTexture.mWidth, (double) SCREEN_HEIGHT / gSceneTexture.mHeight);
+            textureDotRender(&dot, NULL, degrees, NULL, flipType);
         }
 
         if(showFps)
@@ -951,6 +980,7 @@ int main(int argc, char* args[])
     //Free resources and close SDL
     closeTexture(gSceneTexture.mTexture);
     closeTexture(gfpsTexture.mTexture);
+    closeTexture(dot.mTexture);
     close();
 
     return 0;
