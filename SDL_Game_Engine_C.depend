@@ -1,5 +1,5 @@
 # depslib dependency file v1.0
-1581883948 source:c:\users\anton\desktop\code\sdl_game_engine_c\main.c
+1581884126 source:c:\users\anton\desktop\code\sdl_game_engine_c\main.c
 	<stdio.h>
 	<stdlib.h>
 	<SDL.h>

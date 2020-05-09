@@ -228,9 +228,9 @@ void initParticle(struct particleStruct *inputStruct, int x, int y)
     inputStruct->mFrame = rand() % 5;
     switch( rand() % 3 )
     {
-        case 0: inputStruct->mTexture = &gRedTexture; break;
-        case 1: inputStruct->mTexture = &gGreenTexture; break;
-        case 2: inputStruct->mTexture = &gBlueTexture; break;
+        case 0: inputStruct->mTexture = gRedTexture.mTexture; break;
+        case 1: inputStruct->mTexture = gGreenTexture.mTexture; break;
+        case 2: inputStruct->mTexture = gBlueTexture.mTexture; break;
     }
 }
 
@@ -824,7 +824,7 @@ void handleEvent( SDL_Event *e)
                 showFps = true;
             }
             break;
-            case SDLK_UP:
+            case SDLK_F2:
             if(kill == true)
             {
                 kill = false;
@@ -838,6 +838,53 @@ void handleEvent( SDL_Event *e)
     }
 }
 
+void handleDotEvent(struct dotStruct *inputStruct, SDL_Event *e)
+{
+//If a key was pressed
+    if( e->type == SDL_KEYDOWN && e->key.repeat == 0 )
+    {
+        //Adjust the velocity
+        switch( e->key.keysym.sym )
+        {
+            case SDLK_UP: inputStruct->mVelY -= inputStruct->DOT_VEL; break;
+            case SDLK_DOWN: inputStruct->mVelY += inputStruct->DOT_VEL; break;
+            case SDLK_LEFT: inputStruct->mVelX -= inputStruct->DOT_VEL; break;
+            case SDLK_RIGHT: inputStruct->mVelX += inputStruct->DOT_VEL; break;
+        }
+    }
+    //If a key was released
+    else if( e->type == SDL_KEYUP && e->key.repeat == 0 )
+    {
+        //Adjust the velocity
+        switch( e->key.keysym.sym )
+        {
+            case SDLK_UP: inputStruct->mVelY += inputStruct->DOT_VEL; break;
+            case SDLK_DOWN: inputStruct->mVelY -= inputStruct->DOT_VEL; break;
+            case SDLK_LEFT: inputStruct->mVelX += inputStruct->DOT_VEL; break;
+            case SDLK_RIGHT: inputStruct->mVelX -= inputStruct->DOT_VEL; break;
+        }
+    }
+}
+
+void moveDot(struct dotStruct *inputStruct)
+{
+    inputStruct->mPosX += inputStruct->mVelX;
+    //If the dot went too far to the left or right
+    if( ( inputStruct->mPosX < 0 ) || ( inputStruct->mPosX + inputStruct->DOT_WIDTH > SCREEN_WIDTH ) )
+    {
+        //Move back
+        inputStruct->mPosX -= inputStruct->mVelX;
+    }
+        //Move the dot up or down
+    inputStruct->mPosY += inputStruct->mVelY;
+
+    //If the dot went too far up or down
+    if( ( inputStruct->mPosY < 0 ) || ( inputStruct->mPosY + inputStruct->DOT_HEIGHT > SCREEN_HEIGHT ) )
+    {
+        //Move back
+        inputStruct->mPosY -= inputStruct->mVelY;
+    }
+}
 
 
 int main(int argc, char* args[])
@@ -909,8 +956,9 @@ int main(int argc, char* args[])
             }
         //Handle  events
         handleEvent(&e);
+        handleDotEvent(&dot, &e);
         }
-
+        moveDot(&dot);
         float avgFPS = countedFrames / ( getTicks(&fpsTimer) / 1000.f );
         if( avgFPS > 2000000 )
         {
