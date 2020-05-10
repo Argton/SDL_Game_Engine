@@ -407,6 +407,51 @@ bool initLWindowRenderer(struct LWindow *inputStruct)
     return inputStruct->mWindow != NULL && inputStruct->mRenderer != NULL && success;
 }
 
+bool checkCollision( SDL_Rect a, SDL_Rect b )
+{
+    //The sides of the rectangles
+    int leftA, leftB;
+    int rightA, rightB;
+    int topA, topB;
+    int bottomA, bottomB;
+
+    //Calculate the sides of rect A
+    leftA = a.x;
+    rightA = a.x + a.w;
+    topA = a.y;
+    bottomA = a.y + a.h;
+
+    //Calculate the sides of rect B
+    leftB = b.x;
+    rightB = b.x + b.w;
+    topB = b.y;
+    bottomB = b.y + b.h;
+
+    //If any of the sides from A are outside of B
+    if( bottomA <= topB )
+    {
+        return false;
+    }
+
+    if( topA >= bottomB )
+    {
+        return false;
+    }
+
+    if( rightA <= leftB )
+    {
+        return false;
+    }
+
+    if( leftA >= rightB )
+    {
+        return false;
+    }
+
+    //If none of the sides from A are outside B
+    return true;
+}
+
 // Create texture for dotStructs
 bool LDotTexture(struct dotStruct *structinput)
 {
@@ -866,23 +911,27 @@ void handleDotEvent(struct dotStruct *inputStruct, SDL_Event *e)
     }
 }
 
-void moveDot(struct dotStruct *inputStruct)
+void moveDot(struct dotStruct *inputStruct, SDL_Rect *wall)
 {
     inputStruct->mPosX += inputStruct->mVelX;
+    inputStruct->mCollider.x = inputStruct->mPosX;
     //If the dot went too far to the left or right
-    if( ( inputStruct->mPosX < 0 ) || ( inputStruct->mPosX + inputStruct->DOT_WIDTH > SCREEN_WIDTH ) )
+    if( ( inputStruct->mPosX < 0 ) || ( inputStruct->mPosX + inputStruct->DOT_WIDTH > SCREEN_WIDTH ) || checkCollision(inputStruct->mCollider, *wall) )
     {
         //Move back
         inputStruct->mPosX -= inputStruct->mVelX;
+        inputStruct->mCollider.x = inputStruct->mPosX;
     }
         //Move the dot up or down
     inputStruct->mPosY += inputStruct->mVelY;
+    inputStruct->mCollider.y = inputStruct->mPosY;
 
     //If the dot went too far up or down
-    if( ( inputStruct->mPosY < 0 ) || ( inputStruct->mPosY + inputStruct->DOT_HEIGHT > SCREEN_HEIGHT ) )
+    if( ( inputStruct->mPosY < 0 ) || ( inputStruct->mPosY + inputStruct->DOT_HEIGHT > SCREEN_HEIGHT ) || checkCollision(inputStruct->mCollider, *wall)  )
     {
         //Move back
         inputStruct->mPosY -= inputStruct->mVelY;
+        inputStruct->mCollider.y = inputStruct->mPosY;
     }
 }
 
@@ -939,6 +988,14 @@ int main(int argc, char* args[])
         printf( "Failed to load gDot texture! \n" );
     }
 
+
+    //Set the wall
+    SDL_Rect wall;
+    wall.x = 300;
+    wall.y = 40;
+    wall.w = 40;
+    wall.h = 400;
+
     timerInit(&fpsTimer);
     timerStart(&fpsTimer);
     initDot(&dot);
@@ -958,7 +1015,7 @@ int main(int argc, char* args[])
         handleEvent(&e);
         handleDotEvent(&dot, &e);
         }
-        moveDot(&dot);
+        moveDot(&dot, &wall);
         float avgFPS = countedFrames / ( getTicks(&fpsTimer) / 1000.f );
         if( avgFPS > 2000000 )
         {
@@ -992,11 +1049,12 @@ int main(int argc, char* args[])
         */
 
 
-
+        SDL_SetRenderDrawColor( gRenderer, 0x00, 0x00, 0x00, 0xFF );
+        SDL_RenderDrawRect( gRenderer, &wall );
 
         if(!kill)
         {
-            textureRender(&gSceneTexture, NULL, degrees, NULL, flipType, 0 , 0, (double) SCREEN_WIDTH / gSceneTexture.mWidth, (double) SCREEN_HEIGHT / gSceneTexture.mHeight);
+         //   textureRender(&gSceneTexture, NULL, degrees, NULL, flipType, 0 , 0, (double) SCREEN_WIDTH / gSceneTexture.mWidth, (double) SCREEN_HEIGHT / gSceneTexture.mHeight);
             textureDotRender(&dot, NULL, degrees, NULL, flipType);
         }
 
