@@ -991,10 +991,10 @@ int main(int argc, char* args[])
 
     //Set the wall
     SDL_Rect wall;
-    wall.x = 300;
+    wall.x = 30;
     wall.y = 40;
-    wall.w = 40;
-    wall.h = 400;
+    wall.w = 4;
+    wall.h = 40;
 
     timerInit(&fpsTimer);
     timerStart(&fpsTimer);
