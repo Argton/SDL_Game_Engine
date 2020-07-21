@@ -371,15 +371,18 @@
 	"begin_code.h"
 	"close_code.h"
 
-1595185275 source:d:\code\sdl_game_engine_c\main.c
+1595370237 source:d:\code\sdl_game_engine_c\main.c
 	<stdio.h>
 	<stdlib.h>
 	<SDL.h>
+	<math.h>
 	<SDL_image.h>
 	<SDL_mixer.h>
 	<SDL_ttf.h>
 	<stdbool.h>
 	<string.h>
+	<Windows.h>
+	<unistd.h>
 
 1541002144 d:\code\sdl2\i686-w64-mingw32\include\sdl2\sdl.h
 	"SDL_main.h"
