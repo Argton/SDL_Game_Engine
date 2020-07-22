@@ -1,13 +1,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
-#include <SDL.h>
 #include <math.h>
+#include <stdbool.h>
+#include <string.h>
+#define SDL_MAIN_HANDLED
+#include <SDL.h>
 #include <SDL_image.h>
 #include <SDL_mixer.h>
 #include <SDL_ttf.h>
-#include <stdbool.h>
-#include <string.h>
 
 #ifdef _WIN32
 #include <Windows.h>
@@ -91,8 +92,8 @@ struct textureStruct
     char *imagePath;
     int mWidth;
     int mHeight;
-    int xPos;
-    int yPos;
+    int mPosX;
+    int mPosY;
     SDL_Texture* mTexture;
 };
 
@@ -115,14 +116,9 @@ struct LWindow
 // Used for rendering a texture from a text string
 struct ttfStruct
 {
-    char *fontPath;
-    int mWidth;
-    int mHeight;
-    int xPos;
-    int yPos;
-    SDL_Texture* mTexture;
     char *textureText;
     SDL_Color textColor;
+    struct textureStruct texture_struct;
 };
 
 struct timerStruct
@@ -143,18 +139,13 @@ struct particleStruct
 
 struct dotStruct
 {
-    int DOT_WIDTH;
-    int DOT_HEIGHT;
     int DOT_VEL;
-    int mPosX;
-    int mPosY;
     int mVelX;
     int mVelY;
-    char *imagePath;
-    SDL_Texture* mTexture;
     SDL_Color textColor;
     SDL_Rect mCollider;
     struct particleStruct *particle[TOTAL_PARTICLES];
+    struct textureStruct texture_struct;
 };
 
 struct playerStruct
@@ -273,11 +264,13 @@ double bounceFactor( SDL_Rect a, SDL_Rect b )
 
 void initDot(struct dotStruct *inputStruct)
 {
-    inputStruct->DOT_WIDTH = 20;
-    inputStruct->DOT_HEIGHT = 20;
+    inputStruct->texture_struct.mWidth = 20;
+    inputStruct->texture_struct.mHeight = 20;
+    inputStruct->mCollider.w = inputStruct->texture_struct.mWidth;
+    inputStruct->mCollider.h = inputStruct->texture_struct.mHeight;
     inputStruct->DOT_VEL = 20;
-    inputStruct->mPosX = SCREEN_WIDTH / 2;
-    inputStruct->mPosY = SCREEN_HEIGHT / 2;
+    inputStruct->texture_struct.mPosX = SCREEN_WIDTH / 2;
+    inputStruct->texture_struct.mPosY = SCREEN_HEIGHT / 2;
     int granularity = 20;
     srand((unsigned int)time(NULL));
     double xfactor = (double) (40 + rand() % granularity) / 100;
@@ -316,7 +309,6 @@ void initParticle(struct particleStruct *inputStruct, int x, int y)
 bool initRenderer()
 {
     bool success = true;
-
     if( SDL_Init( SDL_INIT_VIDEO | SDL_INIT_AUDIO ) < 0 )
     {
         printf( "SDL could not initialize! SDL_Error: %s\n", SDL_GetError() );
@@ -392,7 +384,6 @@ bool initLWindow(struct LWindow *inputStruct)
 bool initLWindowRenderer(struct LWindow *inputStruct)
 {
     bool success = true;
-
     if( SDL_Init( SDL_INIT_VIDEO | SDL_INIT_AUDIO ) < 0 )
     {
         printf( "SDL could not initialize! SDL_Error: %s\n", SDL_GetError() );
@@ -413,7 +404,7 @@ bool initLWindowRenderer(struct LWindow *inputStruct)
             SDL_GetDisplayBounds( i, &gDisplayBounds[ i ] );
         }
         inputStruct->mWindow = NULL;
-        inputStruct->mWindow = SDL_CreateWindow( "SDL Tutorial", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN );
+        inputStruct->mWindow = SDL_CreateWindow( "Pong", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN );
         if( inputStruct->mWindow == NULL )
         {
             printf( "Window could not be created! SDL_Error: %s\n", SDL_GetError() );
@@ -465,40 +456,6 @@ bool initLWindowRenderer(struct LWindow *inputStruct)
 }
 
 /*Loading functions*/
-
-// Create texture for dotStructs
-bool LDotTexture(struct dotStruct *structinput)
-{
-    structinput->mTexture = NULL;
-    SDL_Surface* loadedSurface = IMG_Load( structinput->imagePath );
-    if( loadedSurface == NULL )
-    {
-        printf( "Unable to load image %s! SDL_image Error: %s\n", structinput->imagePath, IMG_GetError() );
-    }
-    else
-    {
-        SDL_SetColorKey( loadedSurface, SDL_TRUE, SDL_MapRGB( loadedSurface->format, 0, 0xFF, 0xFF ) );
-        structinput->mTexture = SDL_CreateTextureFromSurface( gRenderer, loadedSurface );
-        if( structinput->mTexture == NULL )
-        {
-            printf( "Unable to create texture from %s! SDL Error: %s\n", structinput->imagePath, SDL_GetError() );
-        }
-        else
-        {
-            structinput->DOT_WIDTH = loadedSurface->w;
-            structinput->DOT_HEIGHT = loadedSurface->h;
-            structinput->mCollider.w = structinput->DOT_WIDTH;
-            structinput->mCollider.h = structinput->DOT_HEIGHT;
-            textureCounter++;
-            if(DBG) {
-                printf("Texture loaded. Number of loaded textures: %d\n", textureCounter);
-            }
-        }
-        SDL_FreeSurface( loadedSurface );
-    }
-    loadedSurface = NULL;
-    return structinput->mTexture != NULL;
-}
 
 bool LPlayerTexture(struct playerStruct *structinput)
 {
@@ -573,7 +530,7 @@ bool LTexture(struct textureStruct *structinput)
 // Create texture from a text string for a struct
 bool LRenderedText(struct ttfStruct *structinput, SDL_Color textColor, int size )
 {
-    gFont = TTF_OpenFont( structinput->fontPath, size );
+    gFont = TTF_OpenFont( structinput->texture_struct.imagePath, size );
     if( gFont == NULL )
     {
         printf( "Failed to load font! SDL_ttf Error: %s\n", TTF_GetError() );
@@ -587,28 +544,28 @@ bool LRenderedText(struct ttfStruct *structinput, SDL_Color textColor, int size 
         }
         else
         {
-            structinput->mTexture = SDL_CreateTextureFromSurface( gRenderer, textSurface );
-            if( structinput->mTexture == NULL )
+            structinput->texture_struct.mTexture = SDL_CreateTextureFromSurface( gRenderer, textSurface );
+            if( structinput->texture_struct.mTexture == NULL )
             {
                 printf( "Unable to create texture from rendered text! SDL Error: %s\n", SDL_GetError() );
             }
             else
             {
-                structinput->mWidth = textSurface->w;
-                structinput->mHeight = textSurface->h;
+                structinput->texture_struct.mWidth = textSurface->w;
+                structinput->texture_struct.mHeight = textSurface->h;
             }
         }
         SDL_FreeSurface( textSurface );
         textSurface = NULL;
     }
     if(DBG) {
-        if(structinput->mTexture != NULL)
+        if(structinput->texture_struct.mTexture != NULL)
         {
             textureCounter++;
             printf("Texture loaded. Number of loaded textures: %d\n", textureCounter);
         }
     }
-    return structinput->mTexture != NULL;
+    return structinput->texture_struct.mTexture != NULL;
 }
 
 bool reloadRenderedText(struct ttfStruct *structinput, SDL_Color textColor)
@@ -622,29 +579,29 @@ bool reloadRenderedText(struct ttfStruct *structinput, SDL_Color textColor)
     }
     else
     {
-        structinput->mTexture = SDL_CreateTextureFromSurface( gRenderer, textSurface );
-        if( structinput->mTexture == NULL )
+        structinput->texture_struct.mTexture = SDL_CreateTextureFromSurface( gRenderer, textSurface );
+        if( structinput->texture_struct.mTexture == NULL )
         {
             printf( "Unable to create texture from rendered text! SDL Error: %s\n", SDL_GetError() );
             success = false;
         }
         else
         {
-            structinput->mWidth = textSurface->w;
-            structinput->mHeight = textSurface->h;
+            structinput->texture_struct.mWidth = textSurface->w;
+            structinput->texture_struct.mHeight = textSurface->h;
         }
     }
     SDL_FreeSurface( textSurface );
     textSurface = NULL;
-    return structinput->mTexture != NULL && success;
+    return structinput->texture_struct.mTexture != NULL && success;
 }
 
 /*Rendering functions*/
 
 // Render texture for a struct containing an image path to render
-void textureRender(struct textureStruct *structinput, SDL_Rect* clip, double angle, SDL_Point* center, SDL_RendererFlip flip, int offsetX, int offsetY, double scaleX, double scaleY)
+void textureRender(struct textureStruct *structinput, SDL_Rect* clip, double angle, SDL_Point* center, SDL_RendererFlip flip, double scaleX, double scaleY)
 {
-    SDL_Rect renderQuad = { structinput->xPos + offsetX, structinput->yPos + offsetY, structinput->mWidth * scaleX, structinput->mHeight * scaleY };
+    SDL_Rect renderQuad = { structinput->mPosX, structinput->mPosY, structinput->mWidth * scaleX, structinput->mHeight * scaleY };
 
     if( clip != NULL )
     {
@@ -655,9 +612,9 @@ void textureRender(struct textureStruct *structinput, SDL_Rect* clip, double ang
 }
 
 // Render texture for a struct containing a text string to render
-void textureRenderttf(struct ttfStruct *structinput, SDL_Rect* clip, double angle, SDL_Point* center, SDL_RendererFlip flip, int offsetX, int offsetY)
+void textureRenderttf(struct ttfStruct *structinput, SDL_Rect* clip, double angle, SDL_Point* center, SDL_RendererFlip flip)
 {
-    SDL_Rect renderQuad = { structinput->xPos + offsetX, structinput->yPos + offsetY, structinput->mWidth, structinput->mHeight };
+    SDL_Rect renderQuad = { structinput->texture_struct.mPosX, structinput->texture_struct.mPosY, structinput->texture_struct.mWidth, structinput->texture_struct.mHeight };
 
     if( clip != NULL )
     {
@@ -665,20 +622,7 @@ void textureRenderttf(struct ttfStruct *structinput, SDL_Rect* clip, double angl
         renderQuad.h = clip->h;
     }
 
-    SDL_RenderCopyEx( gRenderer, structinput->mTexture, clip, &renderQuad, angle, center, flip );
-}
-
-// Render texture for a dotstruct
-void textureDotRender(struct dotStruct *structinput, SDL_Rect* clip, double angle, SDL_Point* center, SDL_RendererFlip flip)
-{
-    SDL_Rect renderQuad = { structinput->mPosX, structinput->mPosY, structinput->DOT_WIDTH, structinput->DOT_HEIGHT };
-
-    if( clip != NULL )
-    {
-        renderQuad.w = clip->w;
-        renderQuad.h = clip->h;
-    }
-    SDL_RenderCopyEx( gRenderer, structinput->mTexture, clip, &renderQuad, angle, center, flip );
+    SDL_RenderCopyEx( gRenderer, structinput->texture_struct.mTexture, clip, &renderQuad, angle, center, flip );
 }
 
 void texturePlayerRender(struct playerStruct *structinput, SDL_Rect* clip, double angle, SDL_Point* center, SDL_RendererFlip flip)
@@ -838,20 +782,17 @@ void handlePlayerEvent(SDL_Event *e)
 
 void moveDot(struct dotStruct *dot, struct playerStruct *player1, struct playerStruct *player2)
 {
-    dot->mPosX += dot->mVelX;
-    dot->mCollider.x = dot->mPosX;
+    dot->texture_struct.mPosX += dot->mVelX;
+    dot->mCollider.x = dot->texture_struct.mPosX;
     bool player1_collided = false;
     bool player2_collided = false;
     double bounce = 0;
-    if(checkCollision(dot->mCollider, player1->mCollider)) {
-        player1_collided = true;
-    } else if(checkCollision(dot->mCollider, player2->mCollider)) {
-        player2_collided = true;
-    }
+    player1_collided = checkCollision(dot->mCollider, player1->mCollider);
+    player2_collided = checkCollision(dot->mCollider, player2->mCollider);
     if(player1_collided || player2_collided)
     {
-        dot->mPosX -= dot->mVelX;
-        dot->mCollider.x = dot->mPosX;
+        dot->texture_struct.mPosX -= dot->mVelX;
+        dot->mCollider.x = dot->texture_struct.mPosX;
         if(player1_collided) {
             bounce = bounceFactor(dot->mCollider, player1->mCollider);
             dot->mVelX = dot->DOT_VEL * (1 - bounce);
@@ -861,25 +802,25 @@ void moveDot(struct dotStruct *dot, struct playerStruct *player1, struct playerS
         }
         dot->mVelY = dot->DOT_VEL * bounce;
     }
-    else if( (dot->mPosX < 0 ) ) {
+    else if( (dot->texture_struct.mPosX < 0 ) ) {
         score[1]++;
         sleep(500);
         initDot(dot);
-    } else if (( dot->mPosX + dot->DOT_WIDTH > SCREEN_WIDTH )) {
+    } else if (( dot->texture_struct.mPosX + dot->texture_struct.mWidth > SCREEN_WIDTH )) {
         score[0]++;
         sleep(500);
         initDot(dot);
     }
 
-    dot->mPosY += dot->mVelY;
-    dot->mCollider.y = dot->mPosY;
+    dot->texture_struct.mPosY += dot->mVelY;
+    dot->mCollider.y = dot->texture_struct.mPosY;
 
     if( checkCollision(dot->mCollider, player1->mCollider) || checkCollision(dot->mCollider, player2->mCollider) )
     {
         dot->mVelY = -dot->mVelY;
         dot->mVelX = -dot->mVelX;
-        dot->mPosY -= dot->mVelY;
-    } else if (( dot->mPosY < 0 ) || ( dot->mPosY + dot->DOT_HEIGHT > SCREEN_HEIGHT )) {
+        dot->texture_struct.mPosY -= dot->mVelY;
+    } else if (( dot->texture_struct.mPosY < 0 ) || ( dot->texture_struct.mPosY + dot->texture_struct.mHeight > SCREEN_HEIGHT )) {
         dot->mVelY = -dot->mVelY;
     }
 }
@@ -933,36 +874,36 @@ int main(int argc, char* args[])
     char font_name[32] = "OpenSans-Regular.ttf";
 
     for(int i = 0; i < 4; i++) {
-        help_text[i].fontPath = font_name;
-        help_text[i].xPos = 0;
-        help_text[i].yPos = i * 40;
+        help_text[i].texture_struct.imagePath = font_name;
+        help_text[i].texture_struct.mPosX = 0;
+        help_text[i].texture_struct.mPosY = i * 40;
     }
     help_text[0].textureText = "Press ENTER for new game.";
     help_text[1].textureText = "Player1 controls: W and S";
     help_text[2].textureText = "Player2 controls: UP and DOWN arrow keys";
     help_text[3].textureText = "Press F1 to show this help";
 
-    gfpsTexture.fontPath = font_name;
+    gfpsTexture.texture_struct.imagePath = font_name;
     gfpsTexture.textureText = "empty";
-    gfpsTexture.xPos = 0;
-    gfpsTexture.yPos = 0;
+    gfpsTexture.texture_struct.mPosX = 0;
+    gfpsTexture.texture_struct.mPosY = 0;
 
-    player1_score.fontPath = font_name;
+    player1_score.texture_struct.imagePath = font_name;
     player1_score.textureText = "P1: 0";
-    player1_score.xPos = 40;
-    player1_score.yPos = 0;
+    player1_score.texture_struct.mPosX = 40;
+    player1_score.texture_struct.mPosY = 0;
 
-    player2_score.fontPath = font_name;
+    player2_score.texture_struct.imagePath = font_name;
     player2_score.textureText = "P2: 0";
-    player2_score.xPos = SCREEN_WIDTH - 200;
-    player2_score.yPos = 0;
+    player2_score.texture_struct.mPosX = SCREEN_WIDTH - 200;
+    player2_score.texture_struct.mPosY = 0;
 
-    player_win.fontPath = font_name;
+    player_win.texture_struct.imagePath = font_name;
     player_win.textureText = "empty";
-    player_win.xPos = 0;
-    player_win.yPos = 0;
+    player_win.texture_struct.mPosX = 0;
+    player_win.texture_struct.mPosY = 0;
 
-    dot.imagePath = "dot.bmp";
+    dot.texture_struct.imagePath = "dot.bmp";
     player1.imagePath = "player_texture.png";
     player2.imagePath = "player_texture.png";
 
@@ -990,9 +931,9 @@ int main(int argc, char* args[])
     {
         printf( "Failed to load texture from font! \n" );
     }
-    if(!LDotTexture(&dot) )
+    if(!LTexture(&dot.texture_struct))
     {
-        printf( "Failed to load gDot texture! \n" );
+        printf( "Failed to load dot texture! \n" );
     }
     if(!LPlayerTexture(&player1) )
     {
@@ -1003,9 +944,10 @@ int main(int argc, char* args[])
         printf( "Failed to load player2 texture! \n" );
     }
 
-    SDL_Texture *textures[11] = {help_text[0].mTexture, help_text[1].mTexture, help_text[2].mTexture,
-        help_text[3].mTexture, gfpsTexture.mTexture, player1_score.mTexture, player2_score.mTexture,
-        player_win.mTexture, dot.mTexture, player1.mTexture, player2.mTexture};
+    SDL_Texture *textures[11] = {help_text[0].texture_struct.mTexture, help_text[1].texture_struct.mTexture,
+        help_text[2].texture_struct.mTexture, help_text[3].texture_struct.mTexture, gfpsTexture.texture_struct.mTexture,
+        player1_score.texture_struct.mTexture, player2_score.texture_struct.mTexture, player_win.texture_struct.mTexture,
+        dot.texture_struct.mTexture, player1.mTexture, player2.mTexture};
 
     timerInit(&fpsTimer);
     timerStart(&fpsTimer);
@@ -1053,8 +995,8 @@ int main(int argc, char* args[])
         strcpy(timeText, "FPS: ");
         sprintf(timeBuffer, "%.0f", avgFPS  );
         strcat(timeText, timeBuffer);
-        gfpsTexture.xPos = (SCREEN_WIDTH - 1.5*gfpsTexture.mWidth ) ;
-        gfpsTexture.yPos = ( gfpsTexture.mHeight) ;
+        gfpsTexture.texture_struct.mPosX = (SCREEN_WIDTH - 1.5*gfpsTexture.texture_struct.mWidth ) ;
+        gfpsTexture.texture_struct.mPosY = ( gfpsTexture.texture_struct.mHeight) ;
         gfpsTexture.textureText = timeText;
 
         char player1_text[100] = "";
@@ -1093,27 +1035,26 @@ int main(int argc, char* args[])
         SDL_RenderClear( gRenderer );
 
         SDL_SetRenderDrawColor( gRenderer, 0xFF, 0xFF, 0xFF, 0xFF);
-        if(strcmp(player_win.textureText, "empty") != 0){
-            textureRenderttf(&player_win, NULL, degrees, NULL, flipType, 0 , 0);
-            player_win.textureText = "empty";
+        if(show_menu || !start) {
+            for(int i = 0; i < 4; i++) {
+                textureRender(&help_text[i].texture_struct, NULL, degrees, NULL, flipType, 1, 1);
+            }
         }
-        else if(show_menu || !start) {
-            textureRenderttf(&help_text[0], NULL, degrees, NULL, flipType, 0 , 0);
-            textureRenderttf(&help_text[1], NULL, degrees, NULL, flipType, 0 , 0);
-            textureRenderttf(&help_text[2], NULL, degrees, NULL, flipType, 0 , 0);
-            textureRenderttf(&help_text[3], NULL, degrees, NULL, flipType, 0 , 0);
+        else if(strcmp(player_win.textureText, "empty") != 0){
+            textureRender(&player_win.texture_struct, NULL, degrees, NULL, flipType, 1, 1);
+            player_win.textureText = "empty";
         }
         else if(start) {
             SDL_RenderDrawRect( gRenderer, &top );
             SDL_RenderDrawRect( gRenderer, &bottom );
-            textureDotRender(&dot, NULL, degrees, NULL, flipType);
+            textureRender(&dot.texture_struct, NULL, degrees, NULL, flipType, 1, 1);
             texturePlayerRender(&player1, NULL, degrees, NULL, flipType);
             texturePlayerRender(&player2, NULL, degrees, NULL, flipType);
-            textureRenderttf(&player1_score, NULL, degrees, NULL, flipType, 0 , 0);
-            textureRenderttf(&player2_score, NULL, degrees, NULL, flipType, 0 , 0);
+            textureRender(&player1_score.texture_struct, NULL, degrees, NULL, flipType, 1, 1);
+            textureRender(&player2_score.texture_struct, NULL, degrees, NULL, flipType, 1, 1);
         }
         if(showFps){
-            textureRenderttf(&gfpsTexture, NULL, degrees, NULL, flipType, 0 , 0);
+            textureRender(&gfpsTexture.texture_struct, NULL, degrees, NULL, flipType, 1, 1);
         }
 
         SDL_RenderPresent( gRenderer );

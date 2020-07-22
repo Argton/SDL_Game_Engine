@@ -1,0 +1,24 @@
+/Debug/
+.metadata
+bin/
+tmp/
+*.tmp
+*.bak
+*.swp
+*~.nib
+local.properties
+.settings/
+*.loadpath
+*.project
+*.o
+
+# Locally stored "Eclipse launch configurations"
+*.launch
+
+# CDT-specific (C/C++ Development Tooling)
+.cproject
+
+#Code blocks stuff
+
+*.depend
+*.layout
