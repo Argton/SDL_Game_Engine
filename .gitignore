@@ -19,6 +19,7 @@ local.properties
 .cproject
 
 #Code blocks stuff
-
+*.cbp
+*.cscope_file_list
 *.depend
 *.layout

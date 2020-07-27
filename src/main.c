@@ -4,7 +4,7 @@
 #include <math.h>
 #include <stdbool.h>
 #include <string.h>
-#define SDL_MAIN_HANDLED
+#define SDL_MAIN_HANDLED /*To prevent conflict with the main() in SDL2*/
 #include <SDL.h>
 #include <SDL_image.h>
 #include <SDL_mixer.h>
@@ -23,12 +23,11 @@
 *
 *
 *************************************/
-#define VSYNC
+#define VSYNC 1
 
-// Used to create particle effects
+#define DBG 1
+
 #define TOTAL_PARTICLES 20
-
-#define DBG 0
 /************************************
 *
 *
@@ -53,31 +52,26 @@ const double VEL_Y_MAX_FACTOR = (double) 2/5;
 
 int gTotalDisplays = 0;
 
-// Textures to render
-SDL_Texture* gTexture = NULL;
-
 //The window we'll be rendering to
-SDL_Window* gWindow = NULL;
+SDL_Window *gWindow = NULL;
 
 //The window renderer
-SDL_Renderer* gRenderer = NULL;
+SDL_Renderer *gRenderer = NULL;
 
 //The surface contained by the window
-SDL_Surface* gScreenSurface = NULL;
-
-//Globally used font
-TTF_Font *gFont = NULL;
+SDL_Surface *gScreenSurface = NULL;
 
 SDL_Rect *gDisplayBounds = NULL;
 
-SDL_Color textColor = { 0, 0, 0, 0xFF };
-
 int textureCounter = 0;
-
-bool showFps = false;
+bool show_fps = false;
 bool start = false;
 bool show_menu = false;
 int score[2] = {0, 0};
+
+/*Forward declarations*/
+void close_texture(SDL_Texture* texture);
+
 /************************************
 *
 *
@@ -87,9 +81,8 @@ int score[2] = {0, 0};
 *************************************/
 
 // Used for rendering a texture from an image
-struct textureStruct
-{
-    char *imagePath;
+struct texture_core {
+    char *path;
     int mWidth;
     int mHeight;
     int mPosX;
@@ -98,8 +91,7 @@ struct textureStruct
 };
 
 // A way of keeping track of the status of the window
-struct LWindow
-{
+struct window {
     SDL_Renderer* mRenderer;
     int mWindowID;
     int mWindowDisplayID;
@@ -114,74 +106,70 @@ struct LWindow
 };
 
 // Used for rendering a texture from a text string
-struct ttfStruct
-{
-    char *textureText;
-    SDL_Color textColor;
-    struct textureStruct texture_struct;
+struct ttf {
+    char *text;
+    SDL_Color color;
+    TTF_Font* font;
+    struct texture_core texture_core;
 };
 
-struct timerStruct
-{
+struct timer {
     Uint32 mStartTicks;
     Uint32 mPausedTicks;
     bool mPaused;
     bool mStarted;
 };
 
-struct particleStruct
-{
+struct particle {
     int mPosX;
     int mPosY;
     int mFrame;
     SDL_Texture* mTexture;
 };
 
-struct dotStruct
-{
+struct dot {
     int DOT_VEL;
     int mVelX;
     int mVelY;
-    SDL_Color textColor;
+    SDL_Color color;
     SDL_Rect mCollider;
-    struct particleStruct *particle[TOTAL_PARTICLES];
-    struct textureStruct texture_struct;
+    struct particle *particle[TOTAL_PARTICLES];
+    struct texture_core texture_core;
 };
 
-struct playerStruct
-{
-    int PLAYER_WIDTH;
-    int PLAYER_HEIGHT;
+struct player {
     int PLAYER_VEL;
-    int mPosX;
-    int mPosY;
     int mVelY;
-    char *imagePath;
-    SDL_Color textColor;
+    SDL_Color color;
     SDL_Rect mCollider;
-    SDL_Texture* mTexture;
-    struct particleStruct *particle[TOTAL_PARTICLES];
+    struct texture_core texture_core;
+    struct particle *particle[TOTAL_PARTICLES];
 };
+
+struct LinkedList{
+    struct texture_core *core;
+    struct LinkedList *next;
+ };
 
 /************************************
 *
 *
-* Initialize structs
+* Declaration of structs
 *
 *
 *************************************/
 
-struct textureStruct gDotTexture;
-struct textureStruct gRedTexture;
-struct textureStruct gGreenTexture;
-struct textureStruct gBlueTexture;
-struct textureStruct gShimmerTexture;
+struct texture_core gDotTexture;
+struct texture_core gRedTexture;
+struct texture_core gGreenTexture;
+struct texture_core gBlueTexture;
+struct texture_core gShimmerTexture;
 
-struct playerStruct player1;
-struct playerStruct player2;
-struct ttfStruct player1_score;
-struct ttfStruct player2_score;
-struct dotStruct dot;
+struct player player1;
+struct player player2;
+struct ttf player1_score;
+struct ttf player2_score;
+struct dot dot;
 
 /************************************
 *
@@ -191,15 +179,7 @@ struct dotStruct dot;
 *
 *************************************/
 
-void sleep(int delay) {
-  #ifdef _WIN32
-  Sleep(delay);
-  #else
-  usleep(delay*1000);
-  #endif
-}
-
-bool checkCollision( SDL_Rect a, SDL_Rect b )
+bool check_collision( SDL_Rect a, SDL_Rect b )
 {
     int leftA, leftB;
     int rightA, rightB;
@@ -239,7 +219,7 @@ bool checkCollision( SDL_Rect a, SDL_Rect b )
     return true;
 }
 
-double bounceFactor( SDL_Rect a, SDL_Rect b )
+double bounce_factor( SDL_Rect a, SDL_Rect b )
 {
     int topA, topB;
     int bottomA, bottomB;
@@ -257,56 +237,68 @@ double bounceFactor( SDL_Rect a, SDL_Rect b )
        midHeightA < midHeightB: bounce upward on screen (towards lower y) */
     int max_bounce = (bottomB - topB) / 2 + (bottomA - topA) / 2;
     double bounce = fabs((double) (midHeightA - midHeightB) / max_bounce);
+    /*Cap the bounce factor to 0.75 to prevent overly slow speed in x direction*/
     return bounce > 0.75 ? 0.75 : bounce;
 }
 
-/*Init functions*/
+/*Init functions
+************************************************/
 
-void initDot(struct dotStruct *inputStruct)
+struct LinkedList *slist_init()
 {
-    inputStruct->texture_struct.mWidth = 20;
-    inputStruct->texture_struct.mHeight = 20;
-    inputStruct->mCollider.w = inputStruct->texture_struct.mWidth;
-    inputStruct->mCollider.h = inputStruct->texture_struct.mHeight;
-    inputStruct->DOT_VEL = 20;
-    inputStruct->texture_struct.mPosX = SCREEN_WIDTH / 2;
-    inputStruct->texture_struct.mPosY = SCREEN_HEIGHT / 2;
+    struct LinkedList *temp;
+    temp = (struct LinkedList*)malloc(sizeof(struct LinkedList));
+    temp->next = NULL;
+    return temp;
+}
+
+void init_dot(struct dot *input)
+{
+    input->texture_core.mWidth = 20;
+    input->texture_core.mHeight = 20;
+    input->mCollider.w = input->texture_core.mWidth;
+    input->mCollider.h = input->texture_core.mHeight;
+    input->DOT_VEL = 20;
+    input->texture_core.mPosX = SCREEN_WIDTH / 2;
+    input->texture_core.mPosY = SCREEN_HEIGHT / 2;
     int granularity = 20;
     srand((unsigned int)time(NULL));
     double xfactor = (double) (40 + rand() % granularity) / 100;
     double yfactor = VEL_X_MAX_FACTOR - xfactor;
-    inputStruct->mVelX = (int) inputStruct->DOT_VEL * xfactor;
-    inputStruct->mVelY = (int) inputStruct->DOT_VEL * yfactor;
+    input->mVelX = (int) input->DOT_VEL * xfactor;
+    input->mVelY = (int) input->DOT_VEL * yfactor;
     if(rand() % 2 == 0) {
-        inputStruct->mVelX = inputStruct->mVelX * (-1);
+        input->mVelX = input->mVelX * (-1);
     }
     if(rand() % 2 == 0) {
-        inputStruct->mVelY = inputStruct->mVelY * (-1);
+        input->mVelY = input->mVelY * (-1);
     }
 }
 
-void initPlayer(struct playerStruct *inputStruct)
+void init_player(struct player *input)
 {
-    inputStruct->PLAYER_VEL = 10;
-    inputStruct->mVelY = 0;
+    input->mCollider.w = input->texture_core.mWidth;
+    input->mCollider.h = input->texture_core.mHeight;
+    input->PLAYER_VEL = 10;
+    input->mVelY = 0;
 }
 
 // Initialize a random particle effect
-void initParticle(struct particleStruct *inputStruct, int x, int y)
+void init_particle(struct particle *input, int x, int y)
 {
-    inputStruct->mPosX = x - 5 + ( rand() ) % 25;
-    inputStruct->mPosY = y - 5 + ( rand() ) % 25;
-    inputStruct->mFrame = rand() % 5;
+    input->mPosX = x - 5 + ( rand() ) % 25;
+    input->mPosY = y - 5 + ( rand() ) % 25;
+    input->mFrame = rand() % 5;
     switch( rand() % 3 )
     {
-        case 0: inputStruct->mTexture = gRedTexture.mTexture; break;
-        case 1: inputStruct->mTexture = gGreenTexture.mTexture; break;
-        case 2: inputStruct->mTexture = gBlueTexture.mTexture; break;
+        case 0: input->mTexture = gRedTexture.mTexture; break;
+        case 1: input->mTexture = gGreenTexture.mTexture; break;
+        case 2: input->mTexture = gBlueTexture.mTexture; break;
     }
 }
 
 // Init all SDL related stuff
-bool initRenderer()
+bool init_renderer()
 {
     bool success = true;
     if( SDL_Init( SDL_INIT_VIDEO | SDL_INIT_AUDIO ) < 0 )
@@ -366,7 +358,7 @@ bool initRenderer()
 }
 
 // Used if several monitors are needed
-bool initLWindow(struct LWindow *inputStruct)
+bool init_window(struct window *inputStruct)
 {
     inputStruct->mWindow = NULL;
     inputStruct->mRenderer = NULL;
@@ -380,8 +372,8 @@ bool initLWindow(struct LWindow *inputStruct)
     return inputStruct->mWindow == NULL;
 }
 
-// Used instead of initRenderer if several monitors are used
-bool initLWindowRenderer(struct LWindow *inputStruct)
+// Used instead of init_renderer if several monitors are used
+bool init_window_renderer(struct window *inputStruct)
 {
     bool success = true;
     if( SDL_Init( SDL_INIT_VIDEO | SDL_INIT_AUDIO ) < 0 )
@@ -455,50 +447,124 @@ bool initLWindowRenderer(struct LWindow *inputStruct)
     return inputStruct->mWindow != NULL && inputStruct->mRenderer != NULL && success;
 }
 
-/*Loading functions*/
+/*Misc functions*/
 
-bool LPlayerTexture(struct playerStruct *structinput)
+struct LinkedList *slist_add(struct LinkedList *head, struct texture_core *value)
 {
-    structinput->mTexture = NULL;
-    SDL_Surface* loadedSurface = IMG_Load( structinput->imagePath );
-    if( loadedSurface == NULL )
-    {
-        printf( "Unable to load image %s! SDL_image Error: %s\n", structinput->imagePath, IMG_GetError() );
+    struct LinkedList *temp, *p;
+    temp = slist_init();
+    temp->core = value;
+    if(head == NULL){
+        head = temp;
     }
-    else
-    {
-        SDL_SetColorKey( loadedSurface, SDL_TRUE, SDL_MapRGB( loadedSurface->format, 0, 0xFF, 0xFF ) );
-        structinput->mTexture = SDL_CreateTextureFromSurface( gRenderer, loadedSurface );
-        if( structinput->mTexture == NULL )
-        {
-            printf( "Unable to create texture from %s! SDL Error: %s\n", structinput->imagePath, SDL_GetError() );
+    else{
+        p = head;
+        while(p->next != NULL){
+            p = p->next;
         }
-        else
-        {
-            structinput->PLAYER_WIDTH = loadedSurface->w;
-            structinput->PLAYER_HEIGHT = loadedSurface->h;
-            structinput->mCollider.w = structinput->PLAYER_WIDTH;
-            structinput->mCollider.h = structinput->PLAYER_HEIGHT;
-            textureCounter++;
-            if(DBG) {
-                printf("Texture loaded. Number of loaded textures: %d\n", textureCounter);
-            }
-        }
-        SDL_FreeSurface( loadedSurface );
+        p->next = temp;
     }
-    loadedSurface = NULL;
-    return structinput->mTexture != NULL;
+    return head;
 }
 
+/*Timer functions
+*************************************************/
+
+void sleep_function(int amount)
+{
+  #ifdef _WIN32
+  Sleep(amount);
+  #else
+  usleep(amount*1000);
+  #endif
+}
+
+void timer_init(struct timer *input)
+{
+    input->mStarted = false;
+    input->mPaused = false;
+    input->mStartTicks = 0;
+    input->mPausedTicks = 0;
+}
+
+void timer_start(struct timer *input)
+{
+    input->mStarted = true;
+    input->mPaused = false;
+    input->mStartTicks = SDL_GetTicks();
+    input->mPausedTicks = 0;
+}
+
+void timer_stop(struct timer *input)
+{
+    input->mStarted = false;
+    input->mPaused = false;
+    input->mStartTicks = 0;
+    input->mPausedTicks = 0;
+}
+
+void timer_pause(struct timer *input)
+{
+    if( input->mStarted && !input->mPaused )
+    {
+        input->mPaused = true;
+        input->mPausedTicks = SDL_GetTicks() - input->mStartTicks;
+        input->mStartTicks = 0;
+    }
+}
+
+void timer_unpause(struct timer *input)
+{
+    if( input->mStarted && input->mPaused )
+    {
+        input->mPaused = false;
+        input->mPausedTicks = SDL_GetTicks() - input->mPausedTicks;
+        input->mPausedTicks = 0;
+    }
+}
+
+Uint32 get_ticks(struct timer *input)
+{
+    Uint32 time = 0;
+    if( input->mStarted )
+    {
+        if( input->mPaused)
+        {
+            time = input->mPausedTicks;
+        }
+        else
+            {
+                time = SDL_GetTicks() - input->mStartTicks;
+            }
+    }
+    return time;
+}
+
+void set_fps_text(struct ttf *input, float fps)
+{
+    char timeText[100] = "";
+    char timeBuffer[100] = "";
+    strcpy(timeText, "FPS: ");
+    sprintf(timeBuffer, "%.0f", fps  );
+    strcat(timeText, timeBuffer);
+    input->texture_core.mPosX = (SCREEN_WIDTH - 1.5*input->texture_core.mWidth ) ;
+    input->texture_core.mPosY = input->texture_core.mHeight;
+    input->text = malloc(sizeof(char) * 16);
+    strcpy(input->text, timeText);
+}
+
+/*Loading functions
+*************************************************/
+
 // Create texture from image for a struct
-bool LTexture(struct textureStruct *structinput)
+bool load_texture(struct texture_core *structinput)
 {
     structinput->mTexture = NULL;
 
-    SDL_Surface* loadedSurface = IMG_Load( structinput->imagePath );
+    SDL_Surface* loadedSurface = IMG_Load( structinput->path );
     if( loadedSurface == NULL )
     {
-        printf( "Unable to load image %s! SDL_image Error: %s\n", structinput->imagePath, IMG_GetError() );
+        printf( "Unable to load image %s! SDL_image Error: %s\n", structinput->path, IMG_GetError() );
     }
     else
     {
@@ -506,7 +572,7 @@ bool LTexture(struct textureStruct *structinput)
         structinput->mTexture = SDL_CreateTextureFromSurface( gRenderer, loadedSurface );
         if( structinput->mTexture == NULL )
         {
-            printf( "Unable to create texture from %s! SDL Error: %s\n", structinput->imagePath, SDL_GetError() );
+            printf( "Unable to create texture from %s! SDL Error: %s\n", structinput->path, SDL_GetError() );
         }
         else
         {
@@ -528,212 +594,65 @@ bool LTexture(struct textureStruct *structinput)
 }
 
 // Create texture from a text string for a struct
-bool LRenderedText(struct ttfStruct *structinput, SDL_Color textColor, int size )
+bool load_rendered_text(struct ttf *input, SDL_Color textColor, int size)
 {
-    gFont = TTF_OpenFont( structinput->texture_struct.imagePath, size );
-    if( gFont == NULL )
-    {
+    if(input->font == NULL) {
+        input->font = TTF_OpenFont( input->texture_core.path, size );
+    }
+    if( input->font == NULL ) {
         printf( "Failed to load font! SDL_ttf Error: %s\n", TTF_GetError() );
     }
-    else
-    {
-        SDL_Surface* textSurface = TTF_RenderText_Solid( gFont, structinput->textureText, textColor );
-        if( textSurface == NULL )
-        {
+    else {
+        SDL_Surface* textSurface = TTF_RenderText_Solid( input->font, input->text, textColor );
+        if( textSurface == NULL ) {
             printf( "Unable to render text surface! SDL_ttf Error: %s\n", TTF_GetError() );
         }
-        else
-        {
-            structinput->texture_struct.mTexture = SDL_CreateTextureFromSurface( gRenderer, textSurface );
-            if( structinput->texture_struct.mTexture == NULL )
-            {
+        else {
+            if(input->texture_core.mTexture) {
+                close_texture(input->texture_core.mTexture);
+            }
+            input->texture_core.mTexture = SDL_CreateTextureFromSurface( gRenderer, textSurface );
+            if( input->texture_core.mTexture == NULL ) {
                 printf( "Unable to create texture from rendered text! SDL Error: %s\n", SDL_GetError() );
             }
-            else
-            {
-                structinput->texture_struct.mWidth = textSurface->w;
-                structinput->texture_struct.mHeight = textSurface->h;
+            else {
+                input->texture_core.mWidth = textSurface->w;
+                input->texture_core.mHeight = textSurface->h;
+                textureCounter++;
             }
         }
         SDL_FreeSurface( textSurface );
         textSurface = NULL;
     }
     if(DBG) {
-        if(structinput->texture_struct.mTexture != NULL)
-        {
-            textureCounter++;
-            printf("Texture loaded. Number of loaded textures: %d\n", textureCounter);
+        if(input->texture_core.mTexture != NULL) {
+            printf("TTF texture loaded. Number of loaded textures: %d\n", textureCounter);
         }
     }
-    return structinput->texture_struct.mTexture != NULL;
+    return input->texture_core.mTexture != NULL;
 }
 
-bool reloadRenderedText(struct ttfStruct *structinput, SDL_Color textColor)
-{
-    bool success = true;
-    SDL_Surface* textSurface = TTF_RenderText_Solid( gFont, structinput->textureText, textColor );
-    if( textSurface == NULL )
-    {
-        printf( "Unable to render text surface! SDL_ttf Error: %s\n", TTF_GetError() );
-        success = false;
-    }
-    else
-    {
-        structinput->texture_struct.mTexture = SDL_CreateTextureFromSurface( gRenderer, textSurface );
-        if( structinput->texture_struct.mTexture == NULL )
-        {
-            printf( "Unable to create texture from rendered text! SDL Error: %s\n", SDL_GetError() );
-            success = false;
-        }
-        else
-        {
-            structinput->texture_struct.mWidth = textSurface->w;
-            structinput->texture_struct.mHeight = textSurface->h;
-        }
-    }
-    SDL_FreeSurface( textSurface );
-    textSurface = NULL;
-    return structinput->texture_struct.mTexture != NULL && success;
-}
+/*Rendering functions
+************************************************/
 
-/*Rendering functions*/
-
-// Render texture for a struct containing an image path to render
-void textureRender(struct textureStruct *structinput, SDL_Rect* clip, double angle, SDL_Point* center, SDL_RendererFlip flip, double scaleX, double scaleY)
+// Render a loaded texture
+void texture_render(struct texture_core *input, SDL_Rect* clip, double angle, SDL_Point* center, SDL_RendererFlip flip,
+        double scale_x, double scale_y)
 {
-    SDL_Rect renderQuad = { structinput->mPosX, structinput->mPosY, structinput->mWidth * scaleX, structinput->mHeight * scaleY };
+    SDL_Rect renderQuad = { input->mPosX, input->mPosY, input->mWidth * scale_x, input->mHeight * scale_y };
 
     if( clip != NULL )
     {
         renderQuad.w = clip->w;
         renderQuad.h = clip->h;
     }
-    SDL_RenderCopyEx( gRenderer, structinput->mTexture, clip, &renderQuad, angle, center, flip );
+    SDL_RenderCopyEx( gRenderer, input->mTexture, clip, &renderQuad, angle, center, flip );
 }
 
-// Render texture for a struct containing a text string to render
-void textureRenderttf(struct ttfStruct *structinput, SDL_Rect* clip, double angle, SDL_Point* center, SDL_RendererFlip flip)
-{
-    SDL_Rect renderQuad = { structinput->texture_struct.mPosX, structinput->texture_struct.mPosY, structinput->texture_struct.mWidth, structinput->texture_struct.mHeight };
+/*Event functions
+*************************************************/
 
-    if( clip != NULL )
-    {
-        renderQuad.w = clip->w;
-        renderQuad.h = clip->h;
-    }
-
-    SDL_RenderCopyEx( gRenderer, structinput->texture_struct.mTexture, clip, &renderQuad, angle, center, flip );
-}
-
-void texturePlayerRender(struct playerStruct *structinput, SDL_Rect* clip, double angle, SDL_Point* center, SDL_RendererFlip flip)
-{
-    SDL_Rect renderQuad = { structinput->mPosX, structinput->mPosY, structinput->PLAYER_WIDTH, structinput->PLAYER_HEIGHT };
-
-    if( clip != NULL )
-    {
-        renderQuad.w = clip->w;
-        renderQuad.h = clip->h;
-    }
-    SDL_RenderCopyEx( gRenderer, structinput->mTexture, clip, &renderQuad, angle, center, flip );
-}
-
-/*Timer functions*/
-
-void timerInit(struct timerStruct *inputStruct)
-{
-    inputStruct->mStarted = false;
-    inputStruct->mPaused = false;
-    inputStruct->mStartTicks = 0;
-    inputStruct->mPausedTicks = 0;
-}
-
-void timerStart(struct timerStruct *inputStruct)
-{
-    inputStruct->mStarted = true;
-    inputStruct->mPaused = false;
-    inputStruct->mStartTicks = SDL_GetTicks();
-    inputStruct->mPausedTicks = 0;
-}
-
-void timerStop(struct timerStruct *inputStruct)
-{
-    inputStruct->mStarted = false;
-    inputStruct->mPaused = false;
-    inputStruct->mStartTicks = 0;
-    inputStruct->mPausedTicks = 0;
-}
-
-void timerPause(struct timerStruct *inputStruct)
-{
-    if( inputStruct->mStarted && !inputStruct->mPaused )
-    {
-        inputStruct->mPaused = true;
-        inputStruct->mPausedTicks = SDL_GetTicks() - inputStruct->mStartTicks;
-        inputStruct->mStartTicks = 0;
-    }
-}
-
-void timerUnpause(struct timerStruct *inputStruct)
-{
-    if( inputStruct->mStarted && inputStruct->mPaused )
-    {
-        inputStruct->mPaused = false;
-        inputStruct->mPausedTicks = SDL_GetTicks() - inputStruct->mPausedTicks;
-        inputStruct->mPausedTicks = 0;
-    }
-}
-
-Uint32 getTicks(struct timerStruct *inputStruct)
-{
-    Uint32 time = 0;
-    if( inputStruct->mStarted )
-    {
-        if( inputStruct->mPaused)
-        {
-            time = inputStruct->mPausedTicks;
-        }
-        else
-            {
-                time = SDL_GetTicks() - inputStruct->mStartTicks;
-            }
-    }
-    return time;
-}
-
-// Free all SDL related stuff from memory, except for textures which are freed separately
-void close()
-{
-    SDL_FreeSurface( gScreenSurface );
-    gScreenSurface = NULL;
-
-    TTF_CloseFont( gFont );
-    gFont = NULL;
-
-    SDL_DestroyWindow( gWindow );
-    gWindow = NULL;
-
-    SDL_DestroyRenderer( gRenderer );
-    gRenderer = NULL;
-
-    TTF_Quit();
-    IMG_Quit();
-    SDL_Quit();
-    Mix_Quit();
-}
-
-void closeTexture(SDL_Texture* texture)
-{
-    SDL_DestroyTexture( texture );
-    texture = NULL;
-    textureCounter--;
-    if(DBG) {
-        printf("Killing texture. Number of loaded textures: %d\n", textureCounter);
-    }
-}
-
-/*Event functions*/
-
-void handleEvent( SDL_Event *e)
+void handle_event( SDL_Event *e)
 {
 //If a key was pressed
     if( e->type == SDL_KEYDOWN && e->key.repeat == 0 )
@@ -744,19 +663,19 @@ void handleEvent( SDL_Event *e)
                 show_menu = show_menu == true ? false : true;
             break;
             case SDLK_F3:
-                showFps = showFps == true ? false : true;
+                show_fps = show_fps == true ? false : true;
             break;
             case SDLK_RETURN:
                 start = true;
                 score[0] = 0;
                 score[1] = 0;
-                initDot(&dot);
+                init_dot(&dot);
             break;
         }
     }
 }
 
-void handlePlayerEvent(SDL_Event *e)
+void handle_player_event(SDL_Event *e)
 {
     if( e->type == SDL_KEYDOWN && e->key.repeat == 0 )
     {
@@ -780,64 +699,103 @@ void handlePlayerEvent(SDL_Event *e)
     }
 }
 
-void moveDot(struct dotStruct *dot, struct playerStruct *player1, struct playerStruct *player2)
+void move_dot(struct dot *dot, struct player *player1, struct player *player2)
 {
-    dot->texture_struct.mPosX += dot->mVelX;
-    dot->mCollider.x = dot->texture_struct.mPosX;
+    dot->texture_core.mPosX += dot->mVelX;
+    dot->mCollider.x = dot->texture_core.mPosX;
     bool player1_collided = false;
     bool player2_collided = false;
     double bounce = 0;
-    player1_collided = checkCollision(dot->mCollider, player1->mCollider);
-    player2_collided = checkCollision(dot->mCollider, player2->mCollider);
+    player1_collided = check_collision(dot->mCollider, player1->mCollider);
+    player2_collided = check_collision(dot->mCollider, player2->mCollider);
     if(player1_collided || player2_collided)
     {
-        dot->texture_struct.mPosX -= dot->mVelX;
-        dot->mCollider.x = dot->texture_struct.mPosX;
+        dot->texture_core.mPosX -= dot->mVelX;
+        dot->mCollider.x = dot->texture_core.mPosX;
         if(player1_collided) {
-            bounce = bounceFactor(dot->mCollider, player1->mCollider);
+            bounce = bounce_factor(dot->mCollider, player1->mCollider);
             dot->mVelX = dot->DOT_VEL * (1 - bounce);
         } else {
-            bounce = bounceFactor(dot->mCollider, player2->mCollider);
+            bounce = bounce_factor(dot->mCollider, player2->mCollider);
             dot->mVelX = (-1) * dot->DOT_VEL * (1 - bounce);
         }
         dot->mVelY = dot->DOT_VEL * bounce;
     }
-    else if( (dot->texture_struct.mPosX < 0 ) ) {
+    else if( (dot->texture_core.mPosX < 0 ) ) {
         score[1]++;
-        sleep(500);
-        initDot(dot);
-    } else if (( dot->texture_struct.mPosX + dot->texture_struct.mWidth > SCREEN_WIDTH )) {
+        sleep_function(500);
+        init_dot(dot);
+    } else if (( dot->texture_core.mPosX + dot->texture_core.mWidth > SCREEN_WIDTH )) {
         score[0]++;
-        sleep(500);
-        initDot(dot);
+        sleep_function(500);
+        init_dot(dot);
     }
 
-    dot->texture_struct.mPosY += dot->mVelY;
-    dot->mCollider.y = dot->texture_struct.mPosY;
+    dot->texture_core.mPosY += dot->mVelY;
+    dot->mCollider.y = dot->texture_core.mPosY;
 
-    if( checkCollision(dot->mCollider, player1->mCollider) || checkCollision(dot->mCollider, player2->mCollider) )
+    if( check_collision(dot->mCollider, player1->mCollider) || check_collision(dot->mCollider, player2->mCollider) )
     {
         dot->mVelY = -dot->mVelY;
         dot->mVelX = -dot->mVelX;
-        dot->texture_struct.mPosY -= dot->mVelY;
-    } else if (( dot->texture_struct.mPosY < 0 ) || ( dot->texture_struct.mPosY + dot->texture_struct.mHeight > SCREEN_HEIGHT )) {
+        dot->texture_core.mPosY -= dot->mVelY;
+    } else if (( dot->texture_core.mPosY < 0 ) || ( dot->texture_core.mPosY + dot->texture_core.mHeight > SCREEN_HEIGHT )) {
         dot->mVelY = -dot->mVelY;
     }
 }
 
-void movePlayer(struct playerStruct *inputStruct)
+void move_player(struct player *input)
 {
-    inputStruct->mCollider.x = inputStruct->mPosX;
+    input->mCollider.x = input->texture_core.mPosX;
 
-    inputStruct->mPosY += inputStruct->mVelY;
-    inputStruct->mCollider.y = inputStruct->mPosY;
+    input->texture_core.mPosY += input->mVelY;
+    input->mCollider.y = input->texture_core.mPosY;
 
-    if( ( inputStruct->mPosY < 0 ) || ( inputStruct->mPosY + inputStruct->PLAYER_HEIGHT > SCREEN_HEIGHT ) )
+    if( ( input->texture_core.mPosY < 0 ) || ( input->texture_core.mPosY + input->texture_core.mHeight > SCREEN_HEIGHT ) )
     {
-        inputStruct->mPosY -= inputStruct->mVelY;
-        inputStruct->mCollider.y = inputStruct->mPosY;
+        input->texture_core.mPosY -= input->mVelY;
+        input->mCollider.y = input->texture_core.mPosY;
     }
 }
+
+/*Deconstructors
+*************************************************/
+
+// Free all SDL related stuff from memory, except for textures which are freed separately
+void close()
+{
+    SDL_FreeSurface( gScreenSurface );
+    gScreenSurface = NULL;
+
+    SDL_DestroyWindow( gWindow );
+    gWindow = NULL;
+
+    SDL_DestroyRenderer( gRenderer );
+    gRenderer = NULL;
+
+    TTF_Quit();
+    IMG_Quit();
+    SDL_Quit();
+    Mix_Quit();
+}
+
+void close_font(TTF_Font* font)
+{
+    TTF_CloseFont( font );
+    font = NULL;
+}
+
+void close_texture(SDL_Texture* texture)
+{
+    SDL_DestroyTexture( texture );
+    texture = NULL;
+    textureCounter--;
+    if(DBG) {
+        printf("Killing texture. Number of loaded textures: %d\n", textureCounter);
+    }
+}
+
+/************************************************/
 
 int main(int argc, char* args[])
 {
@@ -847,15 +805,15 @@ int main(int argc, char* args[])
     SDL_RendererFlip flipType = SDL_FLIP_NONE;
 
     //Start up SDL and create window
-    if( !initRenderer() )
+    if( !init_renderer() )
     {
         printf( "Failed to initialize SDL!\n" );
     }
 
-    struct ttfStruct gfpsTexture;
-    struct ttfStruct player_win;
-    struct ttfStruct help_text[4];
-    struct timerStruct fpsTimer;
+    struct ttf fps;
+    struct ttf player_win;
+    struct ttf help_text[4];
+    struct timer fps_timer;
 
     SDL_Color textColor = { 0xFF, 0xFF, 0xFF, 0 };
 
@@ -874,100 +832,104 @@ int main(int argc, char* args[])
     char font_name[32] = "OpenSans-Regular.ttf";
 
     for(int i = 0; i < 4; i++) {
-        help_text[i].texture_struct.imagePath = font_name;
-        help_text[i].texture_struct.mPosX = 0;
-        help_text[i].texture_struct.mPosY = i * 40;
+        help_text[i].texture_core.path = font_name;
+        help_text[i].texture_core.mPosX = 0;
+        help_text[i].texture_core.mPosY = i * 40;
+        help_text[i].font = NULL;
+        help_text[i].texture_core.mTexture = NULL;
     }
-    help_text[0].textureText = "Press ENTER for new game.";
-    help_text[1].textureText = "Player1 controls: W and S";
-    help_text[2].textureText = "Player2 controls: UP and DOWN arrow keys";
-    help_text[3].textureText = "Press F1 to show this help";
+    help_text[0].text = "Press ENTER for new game.";
+    help_text[1].text = "Player1 controls: W and S";
+    help_text[2].text = "Player2 controls: UP and DOWN arrow keys";
+    help_text[3].text = "Press F1 to show this help";
 
-    gfpsTexture.texture_struct.imagePath = font_name;
-    gfpsTexture.textureText = "empty";
-    gfpsTexture.texture_struct.mPosX = 0;
-    gfpsTexture.texture_struct.mPosY = 0;
+    fps.texture_core.path = font_name;
+    fps.text = "empty";
+    fps.texture_core.mPosX = 0;
+    fps.texture_core.mPosY = 0;
+    fps.font = NULL;
+    fps.texture_core.mTexture = NULL;
 
-    player1_score.texture_struct.imagePath = font_name;
-    player1_score.textureText = "P1: 0";
-    player1_score.texture_struct.mPosX = 40;
-    player1_score.texture_struct.mPosY = 0;
+    player1_score.texture_core.path = font_name;
+    player1_score.text = "P1: 0";
+    player1_score.texture_core.mPosX = 40;
+    player1_score.texture_core.mPosY = 0;
+    player1_score.font = NULL;
+    player1_score.texture_core.mTexture = NULL;
 
-    player2_score.texture_struct.imagePath = font_name;
-    player2_score.textureText = "P2: 0";
-    player2_score.texture_struct.mPosX = SCREEN_WIDTH - 200;
-    player2_score.texture_struct.mPosY = 0;
+    player2_score.texture_core.path = font_name;
+    player2_score.text = "P2: 0";
+    player2_score.texture_core.mPosX = SCREEN_WIDTH - 200;
+    player2_score.texture_core.mPosY = 0;
+    player2_score.font = NULL;
+    player2_score.texture_core.mTexture = NULL;
 
-    player_win.texture_struct.imagePath = font_name;
-    player_win.textureText = "empty";
-    player_win.texture_struct.mPosX = 0;
-    player_win.texture_struct.mPosY = 0;
+    player_win.texture_core.path = font_name;
+    player_win.text = "empty";
+    player_win.texture_core.mPosX = 0;
+    player_win.texture_core.mPosY = 0;
+    player_win.font = NULL;
+    player_win.texture_core.mTexture = NULL;
 
-    dot.texture_struct.imagePath = "dot.bmp";
-    player1.imagePath = "player_texture.png";
-    player2.imagePath = "player_texture.png";
+    dot.texture_core.path = "dot.bmp";
+    player1.texture_core.path = "player_texture.png";
+    player2.texture_core.path = "player_texture.png";
 
     int countedFrames = 0;
 
     for(int i = 0; i < 4; i++) {
-        if( !LRenderedText(&help_text[i], textColor, 28) )
-        {
-            printf( "Failed to load texture from font! \n" );
-        }
+        load_rendered_text(&help_text[i], textColor, 28);
     }
-    if( !LRenderedText(&gfpsTexture, textColor, 28) )
-    {
-        printf( "Failed to load texture from font! \n" );
-    }
-    if( !LRenderedText(&player1_score, textColor, 72) )
-    {
-        printf( "Failed to load texture from font! \n" );
-    }
-    if( !LRenderedText(&player2_score, textColor, 72) )
-    {
-        printf( "Failed to load texture from font! \n" );
-    }
-    if( !LRenderedText(&player_win, textColor, 72) )
-    {
-        printf( "Failed to load texture from font! \n" );
-    }
-    if(!LTexture(&dot.texture_struct))
-    {
-        printf( "Failed to load dot texture! \n" );
-    }
-    if(!LPlayerTexture(&player1) )
-    {
-        printf( "Failed to load player1 texture! \n" );
-    }
-    if(!LPlayerTexture(&player2) )
-    {
-        printf( "Failed to load player2 texture! \n" );
-    }
+    load_rendered_text(&fps, textColor, 28);
+    load_rendered_text(&player1_score, textColor, 72);
+    load_rendered_text(&player2_score, textColor, 72);
+    load_rendered_text(&player_win, textColor, 72);
+    load_texture(&dot.texture_core);
+    load_texture(&player1.texture_core);
+    load_texture(&player2.texture_core);
 
-    SDL_Texture *textures[11] = {help_text[0].texture_struct.mTexture, help_text[1].texture_struct.mTexture,
-        help_text[2].texture_struct.mTexture, help_text[3].texture_struct.mTexture, gfpsTexture.texture_struct.mTexture,
-        player1_score.texture_struct.mTexture, player2_score.texture_struct.mTexture, player_win.texture_struct.mTexture,
-        dot.texture_struct.mTexture, player1.mTexture, player2.mTexture};
+    TTF_Font *all_fonts[8] = {help_text[0].font, help_text[1].font, help_text[2].font, help_text[3].font, fps.font,
+            player1_score.font, player2_score.font, player_win.font};
 
-    timerInit(&fpsTimer);
-    timerStart(&fpsTimer);
+    struct LinkedList *ptr_slist = NULL;
+    ptr_slist = slist_init();
+    ptr_slist->core = &help_text[0].texture_core;
+    slist_add(ptr_slist, &help_text[1].texture_core);
+    slist_add(ptr_slist, &help_text[2].texture_core);
+    slist_add(ptr_slist, &help_text[3].texture_core);
+    slist_add(ptr_slist, &fps.texture_core);
+    slist_add(ptr_slist, &player1_score.texture_core);
+    slist_add(ptr_slist, &player2_score.texture_core);
+    slist_add(ptr_slist, &player_win.texture_core);
+    slist_add(ptr_slist, &dot.texture_core);
+    slist_add(ptr_slist, &player1.texture_core);
+    slist_add(ptr_slist, &player2.texture_core);
 
-    initPlayer(&player1);
-    initPlayer(&player2);
-    initDot(&dot);
+    timer_init(&fps_timer);
+    timer_start(&fps_timer);
 
-    player1.mPosX = player1.PLAYER_WIDTH + 20;
-    player1.mPosY = SCREEN_HEIGHT / 2;
+    init_player(&player1);
+    init_player(&player2);
+    init_dot(&dot);
 
-    player2.mPosX = SCREEN_WIDTH - 5 - player2.PLAYER_WIDTH - 20;
-    player2.mPosY = SCREEN_HEIGHT / 2;
+    player1.texture_core.mPosX = player1.texture_core.mWidth + 20;
+    player1.texture_core.mPosY = SCREEN_HEIGHT / 2;
+
+    player2.texture_core.mPosX = SCREEN_WIDTH - 5 - player2.texture_core.mWidth - 20;
+    player2.texture_core.mPosY = SCREEN_HEIGHT / 2;
 
     // Main loop
     while( !quit )
     {
+        float avg_FPS = countedFrames / ( get_ticks(&fps_timer) / 1000.f );
+        if( avg_FPS > 2000000 )
+        {
+            avg_FPS = 0;
+        }
+
         if(score[0] == 10 || score[1] == 10) {
             start = false;
-            player_win.textureText = score[0] == 10 ? "Player1 wins!" : "Player2 wins!";
+            player_win.text = score[0] == 10 ? "Player1 wins!" : "Player2 wins!";
         }
         //Handle events on queue
         while( SDL_PollEvent( &e ) != 0 )
@@ -976,91 +938,70 @@ int main(int argc, char* args[])
             {
                 quit = true;
             }
-            handleEvent(&e);
-            handlePlayerEvent(&e);
-        }
-        if(start) {
-            moveDot(&dot, &player1, &player2);
-            movePlayer(&player1);
-            movePlayer(&player2);
-        }
-        float avgFPS = countedFrames / ( getTicks(&fpsTimer) / 1000.f );
-        if( avgFPS > 2000000 )
-        {
-            avgFPS = 0;
+            handle_event(&e);
+            handle_player_event(&e);
         }
 
-        char timeText[100] = "";
-        char timeBuffer[100] = "";
-        strcpy(timeText, "FPS: ");
-        sprintf(timeBuffer, "%.0f", avgFPS  );
-        strcat(timeText, timeBuffer);
-        gfpsTexture.texture_struct.mPosX = (SCREEN_WIDTH - 1.5*gfpsTexture.texture_struct.mWidth ) ;
-        gfpsTexture.texture_struct.mPosY = ( gfpsTexture.texture_struct.mHeight) ;
-        gfpsTexture.textureText = timeText;
+        set_fps_text(&fps, avg_FPS);
+
+        if(start) {
+            move_dot(&dot, &player1, &player2);
+            move_player(&player1);
+            move_player(&player2);
+        }
 
         char player1_text[100] = "";
         char player1_buffer[100] = "";
         strcpy(player1_text, "P1: ");
         sprintf(player1_buffer, "%d", score[0] );
         strcat(player1_text, player1_buffer);
-        player1_score.textureText = player1_text;
+        player1_score.text = player1_text;
 
         char player2_text[100] = "";
         char player2_buffer[100] = "";
         strcpy(player2_text, "P2: ");
         sprintf(player2_buffer, "%d", score[1] );
         strcat(player2_text, player2_buffer);
-        player2_score.textureText = player2_text;
+        player2_score.text = player2_text;
 
-        if( !reloadRenderedText(&gfpsTexture, textColor) )
-        {
-            printf( "Failed to load texture from font! \n" );
-        }
-        if( !reloadRenderedText(&player1_score, textColor) )
-        {
-            printf( "Failed to load texture from font! \n" );
-        }
-        if( !reloadRenderedText(&player2_score, textColor) )
-        {
-            printf( "Failed to load texture from font! \n" );
-        }
-        if( !reloadRenderedText(&player_win, textColor) )
-        {
-            printf( "Failed to load texture from font! \n" );
-        }
+        load_rendered_text(&fps, textColor, 60);
+        load_rendered_text(&player1_score, textColor, 60);
+        load_rendered_text(&player2_score, textColor, 60);
+        load_rendered_text(&player_win, textColor, 60);
+
+        struct texture_core start_textures[5] = {player1_score.texture_core, player2_score.texture_core,
+            dot.texture_core, player1.texture_core, player2.texture_core};
 
         //Clear screen
         SDL_SetRenderDrawColor( gRenderer, 0x00, 0x00, 0x00, 0xFF );
         SDL_RenderClear( gRenderer );
 
         SDL_SetRenderDrawColor( gRenderer, 0xFF, 0xFF, 0xFF, 0xFF);
-        if(show_menu || !start) {
-            for(int i = 0; i < 4; i++) {
-                textureRender(&help_text[i].texture_struct, NULL, degrees, NULL, flipType, 1, 1);
-            }
+        if(strcmp(player_win.text, "empty") != 0){
+            texture_render(&player_win.texture_core, NULL, degrees, NULL, flipType, 1, 1);
+            player_win.text = "empty";
         }
-        else if(strcmp(player_win.textureText, "empty") != 0){
-            textureRender(&player_win.texture_struct, NULL, degrees, NULL, flipType, 1, 1);
-            player_win.textureText = "empty";
+        else if(show_menu || !start) {
+            for(int i = 0; i < 4; i++) {
+                texture_render(&help_text[i].texture_core, NULL, degrees, NULL, flipType, 1, 1);
+            }
         }
         else if(start) {
             SDL_RenderDrawRect( gRenderer, &top );
             SDL_RenderDrawRect( gRenderer, &bottom );
-            textureRender(&dot.texture_struct, NULL, degrees, NULL, flipType, 1, 1);
-            texturePlayerRender(&player1, NULL, degrees, NULL, flipType);
-            texturePlayerRender(&player2, NULL, degrees, NULL, flipType);
-            textureRender(&player1_score.texture_struct, NULL, degrees, NULL, flipType, 1, 1);
-            textureRender(&player2_score.texture_struct, NULL, degrees, NULL, flipType, 1, 1);
+            int sz = sizeof(start_textures) / sizeof(start_textures[0]);
+            for(int i = 0; i < sz; i++) {
+                texture_render(&start_textures[i], NULL, degrees, NULL, flipType, 1, 1);
+            }
         }
-        if(showFps){
-            textureRender(&gfpsTexture.texture_struct, NULL, degrees, NULL, flipType, 1, 1);
+        if(show_fps){
+            texture_render(&fps.texture_core, NULL, degrees, NULL, flipType, 1, 1);
         }
 
         SDL_RenderPresent( gRenderer );
         ++countedFrames;
 
-        int frameTicks = getTicks(&fpsTimer);
+        int frameTicks = get_ticks(&fps_timer);
         if( frameTicks < SCREEN_TICKS_PER_FRAME )
         {
             //Wait remaining time
@@ -1068,10 +1009,17 @@ int main(int argc, char* args[])
         }
     }
 
-    //Free resources and close SDL
-    int nmbr = textureCounter;
-    for(int i = 0; i < nmbr; i++) {
-        closeTexture(textures[i]);
+    while(ptr_slist != NULL){
+        struct texture_core *core = ptr_slist->core;
+        SDL_Texture* texture = core->mTexture;
+        close_texture(texture);
+        ptr_slist->core = NULL;
+        ptr_slist = ptr_slist->next;
+    }
+
+    int sz = sizeof(all_fonts) / sizeof(all_fonts[0]);
+    for(int i = 0; i < sz; i++) {
+        close_font(all_fonts[i]);
     }
     close();
 
